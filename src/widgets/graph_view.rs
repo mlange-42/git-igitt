@@ -8,6 +8,7 @@ use unicode_width::UnicodeWidthStr;
 
 pub struct GraphViewState {
     pub text: Vec<String>,
+    pub indices: Vec<usize>,
     pub offset: usize,
     pub selected: Option<usize>,
 }
@@ -16,6 +17,7 @@ impl Default for GraphViewState {
     fn default() -> GraphViewState {
         GraphViewState {
             text: vec![],
+            indices: vec![],
             offset: 0,
             selected: None,
         }
@@ -88,7 +90,9 @@ impl<'a> StatefulWidget for GraphView<'a> {
             end += 1;
         }
 
-        let selected = state.selected.unwrap_or(0).min(state.text.len() - 1);
+        let selected_row = state.selected.map(|idx| state.indices[idx]);
+        let selected = selected_row.unwrap_or(0).min(state.text.len() - 1);
+
         while selected >= end {
             height = height.saturating_add(1);
             end += 1;
@@ -115,7 +119,6 @@ impl<'a> StatefulWidget for GraphView<'a> {
 
         let style = Style::default();
         let mut current_height = 0;
-        let has_selection = state.selected.is_some();
         for (i, item) in state
             .text
             .iter_mut()
@@ -129,8 +132,8 @@ impl<'a> StatefulWidget for GraphView<'a> {
                 pos
             };
 
-            let is_selected = state.selected.map(|s| s == i).unwrap_or(false);
-            let elem_x = if has_selection {
+            let is_selected = selected_row.map(|s| s == i).unwrap_or(false);
+            let elem_x = {
                 let symbol = if is_selected {
                     highlight_symbol
                 } else {
@@ -138,9 +141,8 @@ impl<'a> StatefulWidget for GraphView<'a> {
                 };
                 let (x, _) = buf.set_stringn(x, y, symbol, list_area.width as usize, style);
                 x
-            } else {
-                x
             };
+
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
 
             let body = CtrlChars::parse(item).into_text();

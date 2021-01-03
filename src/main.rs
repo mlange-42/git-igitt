@@ -90,9 +90,9 @@ fn run(settings: Settings) -> Result<(), Box<dyn Error>> {
     })?;
 
     let graph = GitGraph::new(repository, &settings, None)?;
-    let (lines, _indices) = print_unicode(&graph, &settings)?;
+    let (lines, indices) = print_unicode(&graph, &settings)?;
 
-    let mut app = App::new("git-igitt", true).with_graph(lines);
+    let mut app = App::new("git-igitt", true).with_graph(lines, indices);
 
     terminal.clear()?;
 
@@ -110,12 +110,9 @@ fn run(settings: Settings) -> Result<(), Box<dyn Error>> {
                     terminal.show_cursor()?;
                     break;
                 }
-                /*
-                KeyCode::Char(c) => app.on_key(c),
-                KeyCode::Left => app.on_left(),
+
                 KeyCode::Up => app.on_up(),
-                KeyCode::Right => app.on_right(),
-                KeyCode::Down => app.on_down(),*/
+                KeyCode::Down => app.on_down(),
                 _ => {}
             },
             Event::Tick => {}

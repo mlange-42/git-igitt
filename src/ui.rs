@@ -13,7 +13,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     let graph = GraphView::new()
         .block(Block::default().borders(Borders::ALL).title("Graph"))
-        .highlight_symbol(">> ");
+        .highlight_symbol(">");
 
     f.render_stateful_widget(graph, chunks[0], &mut app.graph_state);
 
