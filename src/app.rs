@@ -1,8 +1,12 @@
+use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::graph_view::GraphViewState;
 use git2::Oid;
 use git_graph::graph::GitGraph;
-use git_graph::print::unicode::print_unicode;
+use git_graph::print::format::CommitFormat;
+use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
+
+const HASH_COLOR: u8 = 11;
 
 #[derive(PartialEq)]
 pub enum ActiveView {
@@ -16,11 +20,13 @@ pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 
 pub struct App<'a> {
     pub graph_state: GraphViewState,
+    pub commit_state: CommitViewState,
     pub title: &'a str,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
     pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
     pub is_fullscreen: bool,
+    pub color: bool,
     pub enhanced_graphics: bool,
     pub should_quit: bool,
 }
@@ -29,11 +35,13 @@ impl<'a> App<'a> {
     pub fn new(title: &'a str, enhanced_graphics: bool) -> App<'a> {
         App {
             graph_state: GraphViewState::default(),
+            commit_state: CommitViewState::default(),
             title,
             active_view: ActiveView::Graph,
             prev_active_view: None,
             curr_branches: vec![],
             is_fullscreen: false,
+            color: true,
             enhanced_graphics,
             should_quit: false,
         }
@@ -53,6 +61,11 @@ impl<'a> App<'a> {
 
     pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App<'a> {
         self.curr_branches = branches;
+        self
+    }
+
+    pub fn with_color(mut self, color: bool) -> App<'a> {
+        self.color = color;
         self
     }
 
@@ -80,21 +93,27 @@ impl<'a> App<'a> {
             let (lines, indices) = print_unicode(&graph, &settings)?;
 
             let sel_idx = sel_oid.and_then(|oid| graph.indices.get(&oid)).cloned();
+            let old_idx = self.graph_state.selected;
             self.graph_state.selected = sel_idx;
+            if sel_idx.is_some() != old_idx.is_some() {
+                self.selection_changed()?;
+            }
             Ok(self.with_graph(graph, lines, indices))
         } else {
             Ok(self)
         }
     }
 
-    pub fn on_up(&mut self, is_shift: bool) {
+    pub fn on_up(&mut self, is_shift: bool) -> Result<(), String> {
         match self.active_view {
             ActiveView::Graph => {
                 let step = if is_shift { 10 } else { 1 };
                 if let Some(sel) = self.graph_state.selected {
                     self.graph_state.selected = Some(std::cmp::max(sel.saturating_sub(step), 0));
+                    self.selection_changed()?;
                 } else if !self.graph_state.text.is_empty() {
                     self.graph_state.selected = Some(0);
+                    self.selection_changed()?;
                 }
             }
             ActiveView::Help(scroll) => {
@@ -102,9 +121,10 @@ impl<'a> App<'a> {
             }
             _ => {}
         }
+        Ok(())
     }
 
-    pub fn on_down(&mut self, is_shift: bool) {
+    pub fn on_down(&mut self, is_shift: bool) -> Result<(), String> {
         match self.active_view {
             ActiveView::Graph => {
                 let step = if is_shift { 10 } else { 1 };
@@ -113,8 +133,10 @@ impl<'a> App<'a> {
                         sel.saturating_add(step),
                         self.graph_state.indices.len() - 1,
                     ));
+                    self.selection_changed()?;
                 } else if !self.graph_state.indices.is_empty() {
                     self.graph_state.selected = Some(0);
+                    self.selection_changed()?;
                 }
             }
             ActiveView::Help(scroll) => {
@@ -122,22 +144,27 @@ impl<'a> App<'a> {
             }
             _ => {}
         }
+        Ok(())
     }
 
-    pub fn on_home(&mut self) {
+    pub fn on_home(&mut self) -> Result<(), String> {
         if let ActiveView::Graph = self.active_view {
             if !self.graph_state.text.is_empty() {
                 self.graph_state.selected = Some(0);
+                self.selection_changed()?;
             }
         }
+        Ok(())
     }
 
-    pub fn on_end(&mut self) {
+    pub fn on_end(&mut self) -> Result<(), String> {
         if let ActiveView::Graph = self.active_view {
             if !self.graph_state.indices.is_empty() {
                 self.graph_state.selected = Some(self.graph_state.indices.len() - 1);
+                self.selection_changed()?;
             }
         }
+        Ok(())
     }
     pub fn on_right(&mut self) {
         self.active_view = match &self.active_view {
@@ -176,5 +203,44 @@ impl<'a> App<'a> {
             std::mem::swap(&mut temp, &mut self.active_view);
             self.prev_active_view = Some(temp);
         }
+    }
+
+    fn selection_changed(&mut self) -> Result<(), String> {
+        if let Some(graph) = &self.graph_state.graph {
+            let selected_index = self.graph_state.selected;
+            if let Some(idx) = selected_index {
+                let selected_info = graph.commits.get(idx);
+                if let Some(info) = selected_info {
+                    let commit = graph
+                        .repository
+                        .find_commit(info.oid)
+                        .map_err(|err| err.message().to_string())?;
+
+                    let head_idx = graph.indices.get(&graph.head.oid);
+                    let head = if head_idx.map_or(false, |h| h == &idx) {
+                        Some(&graph.head)
+                    } else {
+                        None
+                    };
+
+                    let hash_color = if self.color { Some(HASH_COLOR) } else { None };
+                    let branches = format_branches(&graph, info, head, self.color)?;
+                    let message_fmt = git_graph::print::format::format(
+                        &commit,
+                        branches,
+                        &None,
+                        hash_color,
+                        &CommitFormat::GitIgitt,
+                    )?;
+
+                    self.commit_state.content = Some(CommitViewInfo::new(message_fmt, info.oid));
+                } else {
+                    self.commit_state.content = None;
+                }
+            } else {
+                self.commit_state.content = None;
+            }
+        }
+        Ok(())
     }
 }

@@ -217,6 +217,7 @@ dependencies = [
  "itertools 0.10.0",
  "muncher",
  "platform-dirs",
+ "textwrap 0.13.2",
  "tui",
  "unicode-width",
  "yansi",

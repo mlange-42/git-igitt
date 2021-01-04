@@ -1,4 +1,5 @@
 use crate::app::{ActiveView, App};
+use crate::widgets::commit_view::CommitView;
 use crate::widgets::graph_view::GraphView;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
@@ -55,7 +56,9 @@ fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
         block = block.border_type(BorderType::Thick);
     }
 
-    f.render_widget(block, target);
+    let commit = CommitView::default().block(block).highlight_symbol(">");
+
+    f.render_stateful_widget(commit, target, &mut app.commit_state);
 }
 
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {

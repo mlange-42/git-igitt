@@ -327,6 +327,7 @@ fn run(
         App::new("git-igitt", true)
             .with_graph(graph, lines, indices)
             .with_branches(branches)
+            .with_color(settings.colored)
     };
 
     std::thread::spawn(move || {
@@ -378,10 +379,10 @@ fn run(
                     app = app.reload(&settings, max_commits)?;
                 }
 
-                KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT)),
-                KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT)),
-                KeyCode::Home => app.on_home(),
-                KeyCode::End => app.on_end(),
+                KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT))?,
+                KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT))?,
+                KeyCode::Home => app.on_home()?,
+                KeyCode::End => app.on_end()?,
                 KeyCode::Left => app.on_left(),
                 KeyCode::Right => app.on_right(),
                 KeyCode::Tab => app.on_tab(),
