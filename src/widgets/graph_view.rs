@@ -1,4 +1,5 @@
 use crate::widgets::ctrl_chars::CtrlChars;
+use git_graph::graph::GitGraph;
 use std::iter::{self, Iterator};
 use tui::buffer::Buffer;
 use tui::layout::Rect;
@@ -7,6 +8,7 @@ use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
 pub struct GraphViewState {
+    pub graph: Option<GitGraph>,
     pub text: Vec<String>,
     pub indices: Vec<usize>,
     pub offset: usize,
@@ -16,6 +18,7 @@ pub struct GraphViewState {
 impl Default for GraphViewState {
     fn default() -> GraphViewState {
         GraphViewState {
+            graph: None,
             text: vec![],
             indices: vec![],
             offset: 0,

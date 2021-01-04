@@ -1,3 +1,4 @@
+use crossterm::event::KeyModifiers;
 use crossterm::{
     event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode},
     execute,
@@ -92,7 +93,7 @@ fn run(settings: Settings) -> Result<(), Box<dyn Error>> {
     let graph = GitGraph::new(repository, &settings, None)?;
     let (lines, indices) = print_unicode(&graph, &settings)?;
 
-    let mut app = App::new("git-igitt", true).with_graph(lines, indices);
+    let mut app = App::new("git-igitt", true).with_graph(graph, lines, indices);
 
     terminal.clear()?;
 
@@ -110,9 +111,18 @@ fn run(settings: Settings) -> Result<(), Box<dyn Error>> {
                     terminal.show_cursor()?;
                     break;
                 }
+                KeyCode::Char('h') => {
+                    app.show_help();
+                }
 
-                KeyCode::Up => app.on_up(),
-                KeyCode::Down => app.on_down(),
+                KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT)),
+                KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT)),
+                KeyCode::Home => app.on_home(),
+                KeyCode::End => app.on_end(),
+                KeyCode::Left => app.on_left(),
+                KeyCode::Right => app.on_right(),
+                KeyCode::Tab => app.on_tab(),
+                KeyCode::Esc => app.on_esc(),
                 _ => {}
             },
             Event::Tick => {}
