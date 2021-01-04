@@ -19,26 +19,6 @@ impl CtrlChunk {
     }
 
     pub fn parse(munch: &mut Muncher) -> Self {
-        // munch.reset_peek();
-        // handles links
-        if munch.seek(5) == Some("\x1B[38;5;".to_string()) {
-            let raw_link = munch.eat_until(|c| *c == '\u{7}').collect::<String>();
-            // eat all of display text for now
-            // TODO display the wanted text for the link [show_me](http://link.com)
-            munch.eat();
-            let _ = munch.eat_until(|c| *c == '\u{7}');
-            munch.eat();
-
-            let mut link = raw_link.replace("\x1B[38;5;", "");
-            let ws = munch.eat_until(|c| !c.is_whitespace()).collect::<String>();
-            link.push_str(&ws);
-
-            return Self {
-                ctrl: vec!["38;5;".to_string()],
-                text: link,
-            };
-        }
-
         munch.reset_peek();
         if munch.seek(1) == Some("\x1B".to_string()) {
             munch.eat();

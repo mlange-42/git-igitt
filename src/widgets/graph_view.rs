@@ -30,15 +30,16 @@ pub struct GraphView<'a> {
     style: Style,
 }
 
-impl<'a> GraphView<'a> {
-    pub fn new() -> GraphView<'a> {
+impl<'a> Default for GraphView<'a> {
+    fn default() -> GraphView<'a> {
         GraphView {
             block: None,
             style: Style::default(),
             highlight_symbol: None,
         }
     }
-
+}
+impl<'a> GraphView<'a> {
     pub fn block(mut self, block: Block<'a>) -> GraphView<'a> {
         self.block = Some(block);
         self
@@ -76,39 +77,28 @@ impl<'a> StatefulWidget for GraphView<'a> {
         if state.text.is_empty() {
             return;
         }
-        let list_height = list_area.height as u32;
+        let list_height = list_area.height as usize;
 
         let mut start = state.offset;
-        let mut end = state.offset;
-        let mut height = 0;
 
-        for _item in state.text.iter().skip(state.offset) {
-            if height + 1 > list_height {
-                break;
-            }
-            height += 1;
-            end += 1;
-        }
+        let height = std::cmp::min(
+            list_height as usize,
+            state.text.len().saturating_sub(state.offset),
+        );
+        let mut end = start + height;
 
         let selected_row = state.selected.map(|idx| state.indices[idx]);
         let selected = selected_row.unwrap_or(0).min(state.text.len() - 1);
 
-        while selected >= end {
-            height = height.saturating_add(1);
-            end += 1;
-            while height > list_height {
-                height = height.saturating_sub(1);
-                start += 1;
-            }
+        if selected >= end {
+            let diff = selected + 1 - end;
+            end += diff;
+            start += diff;
         }
-
-        while selected < start {
-            start -= 1;
-            height = height.saturating_add(1);
-            while height > list_height {
-                end -= 1;
-                height = height.saturating_sub(1);
-            }
+        if selected < start {
+            let diff = start - selected;
+            end -= diff;
+            start -= diff;
         }
         state.offset = start;
 
@@ -118,19 +108,15 @@ impl<'a> StatefulWidget for GraphView<'a> {
             .collect::<String>();
 
         let style = Style::default();
-        let mut current_height = 0;
-        for (i, item) in state
+        for (current_height, (i, item)) in state
             .text
             .iter_mut()
             .enumerate()
             .skip(state.offset)
             .take(end - start)
+            .enumerate()
         {
-            let (x, y) = {
-                let pos = (list_area.left(), list_area.top() + current_height);
-                current_height += 1 as u16;
-                pos
-            };
+            let (x, y) = (list_area.left(), list_area.top() + current_height as u16);
 
             let is_selected = selected_row.map(|s| s == i).unwrap_or(false);
             let elem_x = {

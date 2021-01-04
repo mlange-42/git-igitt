@@ -11,7 +11,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
         .split(f.size());
 
-    let graph = GraphView::new()
+    let graph = GraphView::default()
         .block(Block::default().borders(Borders::ALL).title("Graph"))
         .highlight_symbol(">");
 

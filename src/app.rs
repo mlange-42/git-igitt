@@ -27,10 +27,8 @@ impl<'a> App<'a> {
             if sel > 0 {
                 self.graph_state.selected = Some(sel - 1);
             }
-        } else {
-            if !self.graph_state.text.is_empty() {
-                self.graph_state.selected = Some(0);
-            }
+        } else if !self.graph_state.text.is_empty() {
+            self.graph_state.selected = Some(0);
         }
     }
 
@@ -39,10 +37,8 @@ impl<'a> App<'a> {
             if sel < self.graph_state.indices.len() - 1 {
                 self.graph_state.selected = Some(sel + 1);
             }
-        } else {
-            if !self.graph_state.text.is_empty() {
-                self.graph_state.selected = Some(0);
-            }
+        } else if !self.graph_state.text.is_empty() {
+            self.graph_state.selected = Some(0);
         }
     }
 }
