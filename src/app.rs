@@ -2,7 +2,6 @@ use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::graph_view::GraphViewState;
 use git2::Oid;
 use git_graph::graph::GitGraph;
-use git_graph::print::format::CommitFormat;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
 
@@ -12,6 +11,7 @@ const HASH_COLOR: u8 = 11;
 pub enum ActiveView {
     Graph,
     Commit,
+    Files,
     Diff,
     Help(u16),
 }
@@ -26,6 +26,7 @@ pub struct App<'a> {
     pub prev_active_view: Option<ActiveView>,
     pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
     pub is_fullscreen: bool,
+    pub horizontal_split: bool,
     pub color: bool,
     pub enhanced_graphics: bool,
     pub should_quit: bool,
@@ -41,6 +42,7 @@ impl<'a> App<'a> {
             prev_active_view: None,
             curr_branches: vec![],
             is_fullscreen: false,
+            horizontal_split: true,
             color: true,
             enhanced_graphics,
             should_quit: false,
@@ -119,6 +121,11 @@ impl<'a> App<'a> {
             ActiveView::Help(scroll) => {
                 self.active_view = ActiveView::Help(scroll.saturating_sub(1))
             }
+            ActiveView::Commit => {
+                if let Some(content) = &mut self.commit_state.content {
+                    content.scroll = content.scroll.saturating_sub(1);
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -141,6 +148,11 @@ impl<'a> App<'a> {
             }
             ActiveView::Help(scroll) => {
                 self.active_view = ActiveView::Help(scroll.saturating_add(1))
+            }
+            ActiveView::Commit => {
+                if let Some(content) = &mut self.commit_state.content {
+                    content.scroll = content.scroll.saturating_add(1);
+                }
             }
             _ => {}
         }
@@ -169,7 +181,8 @@ impl<'a> App<'a> {
     pub fn on_right(&mut self) {
         self.active_view = match &self.active_view {
             ActiveView::Graph => ActiveView::Commit,
-            ActiveView::Commit => ActiveView::Diff,
+            ActiveView::Commit => ActiveView::Files,
+            ActiveView::Files => ActiveView::Diff,
             ActiveView::Diff => ActiveView::Diff,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
         }
@@ -178,7 +191,8 @@ impl<'a> App<'a> {
         self.active_view = match &self.active_view {
             ActiveView::Graph => ActiveView::Graph,
             ActiveView::Commit => ActiveView::Graph,
-            ActiveView::Diff => ActiveView::Commit,
+            ActiveView::Files => ActiveView::Commit,
+            ActiveView::Diff => ActiveView::Files,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
         }
     }
@@ -194,6 +208,10 @@ impl<'a> App<'a> {
             self.active_view = ActiveView::Graph;
             self.is_fullscreen = false;
         }
+    }
+
+    pub fn toggle_layout(&mut self) {
+        self.horizontal_split = !self.horizontal_split;
     }
 
     pub fn show_help(&mut self) {
@@ -225,13 +243,8 @@ impl<'a> App<'a> {
 
                     let hash_color = if self.color { Some(HASH_COLOR) } else { None };
                     let branches = format_branches(&graph, info, head, self.color)?;
-                    let message_fmt = git_graph::print::format::format(
-                        &commit,
-                        branches,
-                        &None,
-                        hash_color,
-                        &CommitFormat::GitIgitt,
-                    )?;
+                    let message_fmt =
+                        crate::widgets::format::format(&commit, branches, hash_color)?;
 
                     self.commit_state.content = Some(CommitViewInfo::new(message_fmt, info.oid));
                 } else {

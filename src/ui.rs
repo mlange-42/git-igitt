@@ -16,24 +16,39 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         match app.active_view {
             ActiveView::Graph => draw_graph(f, f.size(), app),
             ActiveView::Commit => draw_commit(f, f.size(), app),
+            ActiveView::Files => draw_files(f, f.size(), app),
             ActiveView::Diff => draw_diff(f, f.size(), app),
             ActiveView::Help(_) => {}
         }
     } else {
+        let base_split = if app.horizontal_split {
+            Direction::Horizontal
+        } else {
+            Direction::Vertical
+        };
+        let sub_split = if app.horizontal_split {
+            Direction::Vertical
+        } else {
+            Direction::Horizontal
+        };
+
         let chunks = Layout::default()
-            .direction(Direction::Horizontal)
+            .direction(base_split)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(f.size());
 
-        draw_graph(f, chunks[0], app);
-
         let right_chunks = Layout::default()
-            .direction(Direction::Vertical)
+            .direction(sub_split)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
             .split(chunks[1]);
 
+        match app.active_view {
+            ActiveView::Files | ActiveView::Diff => draw_diff(f, chunks[0], app),
+            _ => draw_graph(f, chunks[0], app),
+        }
+
         draw_commit(f, right_chunks[0], app);
-        draw_diff(f, right_chunks[1], app);
+        draw_files(f, right_chunks[1], app);
     }
 }
 
@@ -61,6 +76,15 @@ fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     f.render_stateful_widget(commit, target, &mut app.commit_state);
 }
 
+fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
+    let mut block = Block::default().borders(Borders::ALL).title("Files");
+    if app.active_view == ActiveView::Files {
+        block = block.border_type(BorderType::Thick);
+    }
+
+    f.render_widget(block, target);
+}
+
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     let mut block = Block::default().borders(Borders::ALL).title("Diff");
     if app.active_view == ActiveView::Diff {
@@ -82,6 +106,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Left/Right       Change panel\n\
          Tab              Fullscreen panel\n\
          Ecs              Return to default view\n\
+         L                Toggle horizontal/vertical layout\n\
          R                Reload repository graph",
     )
     .block(block)

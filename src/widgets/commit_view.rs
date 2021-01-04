@@ -3,7 +3,6 @@ use git2::Oid;
 use tui::buffer::Buffer;
 use tui::layout::Rect;
 use tui::style::Style;
-use tui::text::Span;
 use tui::widgets::{Block, StatefulWidget, Widget};
 
 pub struct CommitViewState {
@@ -19,10 +18,15 @@ impl Default for CommitViewState {
 pub struct CommitViewInfo {
     pub text: Vec<String>,
     pub oid: Oid,
+    pub scroll: u16,
 }
 impl CommitViewInfo {
     pub fn new(text: Vec<String>, oid: Oid) -> Self {
-        Self { text, oid }
+        Self {
+            text,
+            oid,
+            scroll: 0,
+        }
     }
 }
 
@@ -77,48 +81,63 @@ impl<'a> StatefulWidget for CommitView<'a> {
             return;
         }
 
-        let (x_start, y_start) = (list_area.left(), list_area.top());
+        let (x_start, y0) = (list_area.left(), list_area.top());
+        let list_bottom = list_area.top() + list_area.height;
 
         let max_element_width = list_area.width;
         if let Some(commit_info) = &state.content {
+            let scroll = commit_info.scroll;
+            let y_start = y0 as i32 - scroll as i32;
+
             let wrapping =
                 textwrap::Options::new(list_area.width as usize).subsequent_indent("        ");
+            let ellipsis = &format!(
+                "    ...{}",
+                " ".repeat(max_element_width.saturating_sub(7) as usize)
+            )[..max_element_width as usize];
 
-            let hash = &commit_info.oid.to_string();
-            let hash_span = Span::raw(hash);
-            let pos = buf.set_span(x_start, y_start, &hash_span, max_element_width);
-
-            let mut y = pos.1;
-            for text_line in &commit_info.text {
+            let mut y = y_start;
+            for (line_idx, text_line) in commit_info.text.iter().enumerate() {
                 if text_line.is_empty() {
                     y += 1;
-                    if y > list_area.height {
+                    if y >= list_bottom as i32 {
+                        buf.set_string(x_start, (y - 1) as u16, ellipsis, self.style);
                         break;
                     }
                 } else {
-                    let wrapped = textwrap::fill(&text_line, &wrapping);
+                    let wrapped = if line_idx > 1 {
+                        textwrap::fill(&text_line, &wrapping)
+                    } else {
+                        text_line.clone()
+                    };
 
                     for line in wrapped.lines() {
                         let mut x = x_start;
                         let mut remaining_width = max_element_width as u16;
 
                         let line_span = CtrlChars::parse(&line).into_text();
-                        for txt in line_span {
-                            for line in txt.lines {
-                                if remaining_width == 0 {
-                                    break;
+                        if y >= y0 as i32 {
+                            for txt in line_span {
+                                for line in txt.lines {
+                                    if remaining_width == 0 {
+                                        break;
+                                    }
+                                    let pos = buf.set_spans(x, y as u16, &line, remaining_width);
+                                    let w = pos.0.saturating_sub(x);
+                                    x = pos.0;
+                                    y = pos.1 as i32;
+                                    remaining_width = remaining_width.saturating_sub(w);
                                 }
-                                let pos = buf.set_spans(x, y, &line, remaining_width);
-                                let w = pos.0.saturating_sub(x);
-                                x = pos.0;
-                                y = pos.1;
-                                remaining_width = remaining_width.saturating_sub(w);
                             }
                         }
                         y += 1;
-                        if y > list_area.height {
+                        if y >= list_bottom as i32 {
                             break;
                         }
+                    }
+                    if y >= list_bottom as i32 {
+                        buf.set_string(x_start, (y - 1) as u16, ellipsis, self.style);
+                        break;
                     }
                 }
             }

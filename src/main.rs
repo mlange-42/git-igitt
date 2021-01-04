@@ -378,6 +378,9 @@ fn run(
                 KeyCode::Char('r') => {
                     app = app.reload(&settings, max_commits)?;
                 }
+                KeyCode::Char('l') => {
+                    app.toggle_layout();
+                }
 
                 KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT))?,
                 KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT))?,
