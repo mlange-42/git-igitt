@@ -1,5 +1,8 @@
 use crate::widgets::graph_view::GraphViewState;
+use git2::Oid;
 use git_graph::graph::GitGraph;
+use git_graph::print::unicode::print_unicode;
+use git_graph::settings::Settings;
 
 #[derive(PartialEq)]
 pub enum ActiveView {
@@ -9,11 +12,14 @@ pub enum ActiveView {
     Help(u16),
 }
 
+pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
+
 pub struct App<'a> {
     pub graph_state: GraphViewState,
     pub title: &'a str,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
+    pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
     pub is_fullscreen: bool,
     pub enhanced_graphics: bool,
     pub should_quit: bool,
@@ -26,11 +32,13 @@ impl<'a> App<'a> {
             title,
             active_view: ActiveView::Graph,
             prev_active_view: None,
+            curr_branches: vec![],
             is_fullscreen: false,
             enhanced_graphics,
             should_quit: false,
         }
     }
+
     pub fn with_graph(
         mut self,
         graph: GitGraph,
@@ -41,6 +49,42 @@ impl<'a> App<'a> {
         self.graph_state.text = text;
         self.graph_state.indices = indices;
         self
+    }
+
+    pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App<'a> {
+        self.curr_branches = branches;
+        self
+    }
+
+    pub fn clear_graph(mut self) -> App<'a> {
+        self.graph_state.graph = None;
+        self.graph_state.text = vec![];
+        self.graph_state.indices = vec![];
+        self
+    }
+
+    pub fn reload(
+        mut self,
+        settings: &Settings,
+        max_commits: Option<usize>,
+    ) -> Result<App<'a>, String> {
+        let selected = self.graph_state.selected;
+        let mut temp = None;
+        std::mem::swap(&mut temp, &mut self.graph_state.graph);
+        if let Some(graph) = temp {
+            let sel_oid = selected
+                .and_then(|idx| graph.commits.get(idx))
+                .map(|info| info.oid);
+            let repo = graph.take_repository();
+            let graph = GitGraph::new(repo, &settings, max_commits)?;
+            let (lines, indices) = print_unicode(&graph, &settings)?;
+
+            let sel_idx = sel_oid.and_then(|oid| graph.indices.get(&oid)).cloned();
+            self.graph_state.selected = sel_idx;
+            Ok(self.with_graph(graph, lines, indices))
+        } else {
+            Ok(self)
+        }
     }
 
     pub fn on_up(&mut self, is_shift: bool) {

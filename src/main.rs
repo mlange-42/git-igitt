@@ -9,11 +9,12 @@ use git2::Repository;
 use git_graph::config::{
     create_config, get_available_models, get_model, get_model_name, set_model,
 };
+use git_graph::get_repo;
 use git_graph::graph::GitGraph;
 use git_graph::print::format::CommitFormat;
 use git_graph::print::unicode::print_unicode;
 use git_graph::settings::{BranchOrder, BranchSettings, Characters, MergePatterns, Settings};
-use git_igitt::app::App;
+use git_igitt::app::{App, CurrentBranches};
 use git_igitt::ui;
 use platform_dirs::AppDirs;
 use std::error::Error;
@@ -23,10 +24,13 @@ use std::time::{Duration, Instant};
 use tui::{backend::CrosstermBackend, Terminal};
 
 const REPO_CONFIG_FILE: &str = "git-graph.toml";
+const TICK_RATE: u64 = 2000;
+const CHECK_CHANGE_RATE: u64 = 2000;
 
 enum Event<I> {
     Input(I),
     Tick,
+    Update,
 }
 
 fn main() {
@@ -206,7 +210,7 @@ fn from_args() -> Result<(), String> {
     }
 
     let path = matches.value_of("path").unwrap_or(".");
-    let repository = Repository::discover(path)
+    let repository = get_repo(path)
         .map_err(|err| format!("ERROR: {}\n       Navigate into a repository before running git-graph, or use option --path", err.message()))?;
 
     if let Some(matches) = matches.subcommand_matches("model") {
@@ -292,12 +296,16 @@ fn from_args() -> Result<(), String> {
         merge_patterns: MergePatterns::default(),
     };
 
-    run(settings, commit_limit).map_err(|err| err.to_string())?;
+    run(repository, settings, commit_limit).map_err(|err| err.to_string())?;
 
     Ok(())
 }
 
-fn run(settings: Settings, max_commits: Option<usize>) -> Result<(), Box<dyn Error>> {
+fn run(
+    repository: Repository,
+    settings: Settings,
+    max_commits: Option<usize>,
+) -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
 
     let mut sout = stdout();
@@ -308,38 +316,44 @@ fn run(settings: Settings, max_commits: Option<usize>) -> Result<(), Box<dyn Err
 
     let (tx, rx) = std::sync::mpsc::channel();
 
-    let tick_rate = Duration::from_millis(250);
+    let tick_rate = Duration::from_millis(TICK_RATE);
+    let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
+
+    let mut app = {
+        let graph = GitGraph::new(repository, &settings, max_commits)?;
+        let branches = get_branches(&graph)?;
+        let (lines, indices) = print_unicode(&graph, &settings)?;
+
+        App::new("git-igitt", true)
+            .with_graph(graph, lines, indices)
+            .with_branches(branches)
+    };
 
     std::thread::spawn(move || {
-        let mut last_tick = Instant::now();
+        let mut last_update = Instant::now();
+        let mut sx_old = 0;
+        let mut sy_old = 0;
         loop {
-            // poll for tick rate duration, if no events, sent tick event.
-            let timeout = tick_rate
-                .checked_sub(last_tick.elapsed())
-                .unwrap_or_else(|| Duration::from_secs(0));
+            let timeout = tick_rate;
             if event::poll(timeout).unwrap() {
-                if let CEvent::Key(key) = event::read().unwrap() {
-                    tx.send(Event::Input(key)).unwrap();
+                match event::read().unwrap() {
+                    CEvent::Key(key) => tx.send(Event::Input(key)).expect("Can't send key event"),
+                    CEvent::Mouse(_) => {}
+                    CEvent::Resize(sx, sy) => {
+                        if sx != sx_old || sy != sy_old {
+                            sx_old = sx;
+                            sy_old = sy;
+                            tx.send(Event::Tick).expect("Can't send resize event")
+                        }
+                    }
                 }
             }
-            if last_tick.elapsed() >= tick_rate {
-                tx.send(Event::Tick).unwrap();
-                last_tick = Instant::now();
+            if last_update.elapsed() >= update_tick_rate {
+                tx.send(Event::Update).unwrap();
+                last_update = Instant::now();
             }
         }
     });
-
-    let repository = git2::Repository::discover(".").map_err(|err| {
-        format!(
-            "ERROR: {}\n       Navigate into a repository before running git-igitt.",
-            err.message()
-        )
-    })?;
-
-    let graph = GitGraph::new(repository, &settings, max_commits)?;
-    let (lines, indices) = print_unicode(&graph, &settings)?;
-
-    let mut app = App::new("git-igitt", true).with_graph(graph, lines, indices);
 
     terminal.clear()?;
 
@@ -360,6 +374,9 @@ fn run(settings: Settings, max_commits: Option<usize>) -> Result<(), Box<dyn Err
                 KeyCode::Char('h') => {
                     app.show_help();
                 }
+                KeyCode::Char('r') => {
+                    app = app.reload(&settings, max_commits)?;
+                }
 
                 KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT)),
                 KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT)),
@@ -371,6 +388,11 @@ fn run(settings: Settings, max_commits: Option<usize>) -> Result<(), Box<dyn Err
                 KeyCode::Esc => app.on_esc(),
                 _ => {}
             },
+            Event::Update => {
+                if app.graph_state.graph.is_some() && has_changed(&mut app)? {
+                    app = app.reload(&settings, max_commits)?;
+                }
+            }
             Event::Tick => {}
         }
         if app.should_quit {
@@ -379,4 +401,45 @@ fn run(settings: Settings, max_commits: Option<usize>) -> Result<(), Box<dyn Err
     }
 
     Ok(())
+}
+
+fn has_changed(app: &mut App) -> Result<bool, String> {
+    if let Some(graph) = &app.graph_state.graph {
+        let branches = get_branches(&graph)?;
+
+        if app.curr_branches != branches {
+            app.curr_branches = branches;
+            return Ok(true);
+        }
+
+        let head = graph
+            .repository
+            .head()
+            .map_err(|err| err.message().to_string())?;
+
+        let name = head.name().ok_or_else(|| "No name for HEAD".to_string())?;
+        let name = if name == "HEAD" { &name } else { &name[11..] };
+        if graph.head.name != name
+            || graph.head.oid != head.target().ok_or_else(|| "No id for HEAD".to_string())?
+            || graph.head.is_branch != head.is_branch()
+        {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+fn get_branches(graph: &GitGraph) -> Result<CurrentBranches, String> {
+    graph
+        .repository
+        .branches(None)
+        .map_err(|err| err.message().to_string())?
+        .map(|br| {
+            br.and_then(|(br, _tp)| {
+                br.name()
+                    .map(|n| (n.map(|n| n.to_string()), br.get().target()))
+            })
+        })
+        .collect::<Result<CurrentBranches, _>>()
+        .map_err(|err| err.message().to_string())
 }

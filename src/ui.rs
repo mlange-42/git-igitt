@@ -78,7 +78,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Home/End         Navigate to first/last\n\
          Left/Right       Change panel\n\
          Tab              Fullscreen panel\n\
-         Ecs              Return to default view",
+         Ecs              Return to default view\n\
+         R                Reload repository graph",
     )
     .block(block)
     .scroll((scroll, 0));
