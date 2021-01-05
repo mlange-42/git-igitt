@@ -4,7 +4,13 @@ version = "0.1.0"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+debug = false
+debug-assertions = false
+overflow-checks = false
 
 [features]
 default = ["crossterm"]
@@ -19,4 +25,5 @@ itertools = "0.10"
 clap = {version = "2.33", optional = false}
 platform-dirs = "0.3"
 yansi = "0.5"
-git-graph = { path = "../git-graph" }
+textwrap = {version = "0.13", default-features = false, optional = false, features = ["unicode-width"]}
+git-graph = { git = "https://github.com/mlange-42/git-graph", tag = "0.2.0" }
