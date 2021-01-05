@@ -84,16 +84,21 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if app.active_view == ActiveView::Files {
         block = block.border_type(BorderType::Thick);
     }
+    let color = app.color;
     if let Some(state) = &mut app.commit_state.content {
         let items: Vec<_> = state
             .diffs
             .items
             .iter()
             .map(|item| {
-                FileListItem::new(Text::styled(
-                    format!("{} {}", item.1.to_string(), item.0),
-                    Style::default().fg(item.1.to_color()),
-                ))
+                FileListItem::new(if color {
+                    Text::styled(
+                        format!("{} {}", item.1.to_string(), item.0),
+                        Style::default().fg(item.1.to_color()),
+                    )
+                } else {
+                    Text::raw(format!("{} {}", item.1.to_string(), item.0))
+                })
             })
             .collect();
         let list = FileList::new(items).block(block).highlight_symbol("> ");
@@ -121,10 +126,10 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
         for line in &state.diffs {
             if let Some(pos) = line.find(" @@ ") {
                 let (l1, l2) = line.split_at(pos + 3);
-                text.extend(style_diff_line(l1, &styles));
-                text.extend(style_diff_line(l2, &styles));
+                text.extend(style_diff_line(l1, &styles, app.color));
+                text.extend(style_diff_line(l2, &styles, app.color));
             } else {
-                text.extend(style_diff_line(line, &styles));
+                text.extend(style_diff_line(line, &styles, app.color));
             }
         }
 
@@ -136,17 +141,21 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     }
 }
 
-fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4]) -> Text<'a> {
-    let style = if line.starts_with('+') {
-        styles[0]
-    } else if line.starts_with('-') {
-        styles[1]
-    } else if line.starts_with('@') {
-        styles[2]
+fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Text<'a> {
+    if !color {
+        Text::raw(line)
     } else {
-        styles[3]
-    };
-    Text::styled(line, style)
+        let style = if line.starts_with('+') {
+            styles[0]
+        } else if line.starts_with('-') {
+            styles[1]
+        } else if line.starts_with('@') {
+            styles[2]
+        } else {
+            styles[3]
+        };
+        Text::styled(line, style)
+    }
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
