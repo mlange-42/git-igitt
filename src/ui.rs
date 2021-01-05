@@ -163,16 +163,19 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
 
     let paragraph = Paragraph::new(
         "Q                Quit\n\
-         H                Show this help\n\
+         H/F1             Show this help\n\
+         \n\
          Up/Down          Select / navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\
+         Home/End         Navigate to first/last\n\
          Ctrl + Up/Down   Secondary selection (compare arbitrary commits)\n\
          Return           Clear secondary selection\n\
-         Home/End         Navigate to first/last\n\
+         \n\
          Left/Right       Change panel\n\
          Tab              Panel to fullscreen\n\
          Ecs              Return to default view\n\
          L                Toggle horizontal/vertical layout\n\
+         \n\
          R                Reload repository graph",
     )
     .block(block)

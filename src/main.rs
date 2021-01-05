@@ -372,7 +372,7 @@ fn run(
                     terminal.show_cursor()?;
                     break;
                 }
-                KeyCode::Char('h') => {
+                KeyCode::Char('h') | KeyCode::F(1) => {
                     app.show_help();
                 }
                 KeyCode::Char('r') => {
