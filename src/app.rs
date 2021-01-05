@@ -1,10 +1,12 @@
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
+use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
 use crate::widgets::graph_view::GraphViewState;
 use crate::widgets::list::StatefulList;
-use git2::{DiffFormat, DiffOptions, Oid};
+use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, Oid};
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
+use std::fmt::{Error, Write};
 use std::str::FromStr;
 use tui::style::Color;
 
@@ -46,7 +48,7 @@ impl ToString for DiffType {
         match self {
             DiffType::Added => "+",
             DiffType::Deleted => "-",
-            DiffType::Modified => "~",
+            DiffType::Modified => "m",
             DiffType::Renamed => "r",
         }
         .to_string()
@@ -69,6 +71,7 @@ pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 pub struct App<'a> {
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
+    pub diff_state: DiffViewState,
     pub title: &'a str,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
@@ -85,6 +88,7 @@ impl<'a> App<'a> {
         App {
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
+            diff_state: DiffViewState::default(),
             title,
             active_view: ActiveView::Graph,
             prev_active_view: None,
@@ -177,9 +181,15 @@ impl<'a> App<'a> {
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
                     content.diffs.previous();
+                    self.file_changed()?;
                 }
             }
-            _ => {}
+            ActiveView::Diff => {
+                if let Some(content) = &mut self.diff_state.content {
+                    let step = if is_shift { 10 } else { 1 };
+                    content.scroll = content.scroll.saturating_sub(step);
+                }
+            }
         }
         Ok(())
     }
@@ -210,9 +220,15 @@ impl<'a> App<'a> {
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
                     content.diffs.next();
+                    self.file_changed()?;
                 }
             }
-            _ => {}
+            ActiveView::Diff => {
+                if let Some(content) = &mut self.diff_state.content {
+                    let step = if is_shift { 10 } else { 1 };
+                    content.scroll = content.scroll.saturating_add(step);
+                }
+            }
         }
         Ok(())
     }
@@ -305,19 +321,18 @@ impl<'a> App<'a> {
                         crate::widgets::format::format(&commit, branches, hash_color)?;
 
                     let mut diffs = vec![];
-                    let mut diff_err = Ok(());
                     if let Ok(parent) = commit.parent(0) {
-                        let mut opts = DiffOptions::new();
                         let diff = graph
                             .repository
                             .diff_tree_to_tree(
                                 Some(&parent.tree().map_err(|err| err.message().to_string())?),
                                 Some(&commit.tree().map_err(|err| err.message().to_string())?),
-                                Some(&mut opts),
+                                None,
                             )
                             .map_err(|err| err.message().to_string())?;
 
-                        diff.print(DiffFormat::NameStatus, |_d, _h, l| {
+                        let mut diff_err = Ok(());
+                        diff.print(DiffFormat::NameStatus, |d, _h, l| {
                             let content = std::str::from_utf8(l.content()).unwrap();
                             let tp = match DiffType::from_str(&content[..1]) {
                                 Ok(tp) => tp,
@@ -326,7 +341,12 @@ impl<'a> App<'a> {
                                     return false;
                                 }
                             };
-                            diffs.push((content[1..].to_string(), tp));
+                            diffs.push((
+                                content[1..].to_string(),
+                                tp,
+                                d.old_file().id(),
+                                d.new_file().id(),
+                            ));
                             true
                         })
                         .map_err(|err| err.message().to_string())?;
@@ -346,6 +366,85 @@ impl<'a> App<'a> {
                 self.commit_state.content = None;
             }
         }
+        self.file_changed()?;
         Ok(())
     }
+
+    fn file_changed(&mut self) -> Result<(), String> {
+        self.diff_state.content = None;
+        if let Some(graph) = &self.graph_state.graph {
+            let selected_index = self.graph_state.selected;
+            if let Some(idx) = selected_index {
+                let selected_info = graph.commits.get(idx);
+                if let Some(info) = selected_info {
+                    if let Some(state) = &self.commit_state.content {
+                        if let Some(sel_index) = state.diffs.state.selected() {
+                            let commit = graph
+                                .repository
+                                .find_commit(info.oid)
+                                .map_err(|err| err.message().to_string())?;
+
+                            let selection = &state.diffs.items[sel_index];
+
+                            if let Ok(parent) = commit.parent(0) {
+                                let diff = graph
+                                    .repository
+                                    .diff_tree_to_tree(
+                                        Some(
+                                            &parent
+                                                .tree()
+                                                .map_err(|err| err.message().to_string())?,
+                                        ),
+                                        Some(
+                                            &commit
+                                                .tree()
+                                                .map_err(|err| err.message().to_string())?,
+                                        ),
+                                        None,
+                                    )
+                                    .map_err(|err| err.message().to_string())?;
+
+                                let mut diff_error = Ok(());
+                                let mut diffs = vec![];
+
+                                diff.print(DiffFormat::Patch, |d, h, l| {
+                                    if d.old_file().id() == selection.2
+                                        && d.new_file().id() == selection.3
+                                    {
+                                        match print_diff_line(d, h, l) {
+                                            Ok(line) => diffs.push(line),
+                                            Err(err) => {
+                                                diff_error = Err(err.to_string());
+                                                return false;
+                                            }
+                                        };
+                                    }
+                                    true
+                                })
+                                .map_err(|err| err.message().to_string())?;
+                                diff_error?;
+
+                                self.diff_state.content = Some(DiffViewInfo::new(diffs));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+fn print_diff_line(
+    _delta: DiffDelta,
+    _hunk: Option<DiffHunk>,
+    line: DiffLine,
+) -> Result<String, Error> {
+    let mut out = String::new();
+    match line.origin() {
+        '+' | '-' | ' ' => write!(out, "{}", line.origin())?,
+        _ => {}
+    }
+    write!(out, "{}", std::str::from_utf8(line.content()).unwrap())?;
+    Ok(out)
 }

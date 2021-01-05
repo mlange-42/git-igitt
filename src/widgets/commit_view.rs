@@ -19,12 +19,16 @@ impl Default for CommitViewState {
 
 pub struct CommitViewInfo {
     pub text: Vec<String>,
-    pub diffs: StatefulList<(String, DiffType)>,
+    pub diffs: StatefulList<(String, DiffType, Oid, Oid)>,
     pub oid: Oid,
     pub scroll: u16,
 }
 impl CommitViewInfo {
-    pub fn new(text: Vec<String>, diffs: StatefulList<(String, DiffType)>, oid: Oid) -> Self {
+    pub fn new(
+        text: Vec<String>,
+        diffs: StatefulList<(String, DiffType, Oid, Oid)>,
+        oid: Oid,
+    ) -> Self {
         Self {
             text,
             diffs,

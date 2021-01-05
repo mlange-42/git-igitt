@@ -1,11 +1,12 @@
 use crate::app::{ActiveView, App};
 use crate::widgets::commit_view::CommitView;
 use crate::widgets::graph_view::GraphView;
+use crate::widgets::list::{FileList, FileListItem};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::Style;
+use tui::style::{Color, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, Paragraph};
 use tui::Frame;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
@@ -89,13 +90,13 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             .items
             .iter()
             .map(|item| {
-                ListItem::new(Text::styled(
+                FileListItem::new(Text::styled(
                     format!("{} {}", item.1.to_string(), item.0),
                     Style::default().fg(item.1.to_color()),
                 ))
             })
             .collect();
-        let list = List::new(items).block(block).highlight_symbol("> ");
+        let list = FileList::new(items).block(block).highlight_symbol("> ");
         f.render_stateful_widget(list, target, &mut state.diffs.state);
     } else {
         f.render_widget(block, target);
@@ -107,8 +108,45 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if app.active_view == ActiveView::Diff {
         block = block.border_type(BorderType::Thick);
     }
+    let styles = [
+        Style::default().fg(Color::LightGreen),
+        Style::default().fg(Color::LightRed),
+        Style::default().fg(Color::LightBlue),
+        Style::default(),
+    ];
+    if let Some(state) = &app.diff_state.content {
+        let scroll = state.scroll;
 
-    f.render_widget(block, target);
+        let mut text = Text::from("");
+        for line in &state.diffs {
+            if let Some(pos) = line.find(" @@ ") {
+                let (l1, l2) = line.split_at(pos + 3);
+                text.extend(style_diff_line(l1, &styles));
+                text.extend(style_diff_line(l2, &styles));
+            } else {
+                text.extend(style_diff_line(line, &styles));
+            }
+        }
+
+        let paragraph = Paragraph::new(text).block(block).scroll((scroll, 0));
+
+        f.render_widget(paragraph, target);
+    } else {
+        f.render_widget(block, target);
+    }
+}
+
+fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4]) -> Text<'a> {
+    let style = if line.starts_with('+') {
+        styles[0]
+    } else if line.starts_with('-') {
+        styles[1]
+    } else if line.starts_with('@') {
+        styles[2]
+    } else {
+        styles[3]
+    };
+    Text::styled(line, style)
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
@@ -117,11 +155,11 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let paragraph = Paragraph::new(
         "Q                Quit\n\
          H                Show this help\n\
-         Up/Down          Navigate commits\n\
+         Up/Down          Navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\
          Home/End         Navigate to first/last\n\
          Left/Right       Change panel\n\
-         Tab              Fullscreen panel\n\
+         Tab              Panel to fullscreen\n\
          Ecs              Return to default view\n\
          L                Toggle horizontal/vertical layout\n\
          R                Reload repository graph",
