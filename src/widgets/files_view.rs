@@ -65,14 +65,16 @@ pub struct StatefulList<T> {
     pub items: Vec<T>,
 }
 
-impl<T> StatefulList<T> {
-    pub fn new() -> StatefulList<T> {
+impl<T> Default for StatefulList<T> {
+    fn default() -> StatefulList<T> {
         StatefulList {
             state: FileListState::default(),
             items: Vec::new(),
         }
     }
+}
 
+impl<T> StatefulList<T> {
     pub fn with_items(items: Vec<T>) -> StatefulList<T> {
         StatefulList {
             state: FileListState::default(),

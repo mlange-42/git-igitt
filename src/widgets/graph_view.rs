@@ -13,6 +13,8 @@ pub struct GraphViewState {
     pub indices: Vec<usize>,
     pub offset: usize,
     pub selected: Option<usize>,
+    pub secondary_selected: Option<usize>,
+    pub secondary_changed: bool,
 }
 
 impl Default for GraphViewState {
@@ -23,13 +25,71 @@ impl Default for GraphViewState {
             indices: vec![],
             offset: 0,
             selected: None,
+            secondary_selected: None,
+            secondary_changed: false,
         }
+    }
+}
+impl GraphViewState {
+    pub fn move_selection(&mut self, steps: usize, down: bool) -> bool {
+        let changed = if let Some(sel) = self.selected {
+            let new_idx = if down {
+                std::cmp::min(sel.saturating_add(steps), self.indices.len() - 1)
+            } else {
+                std::cmp::max(sel.saturating_sub(steps), 0)
+            };
+            self.selected = Some(new_idx);
+            true
+        } else if !self.text.is_empty() {
+            self.selected = Some(0);
+            true
+        } else {
+            false
+        };
+        if changed {
+            self.secondary_changed = false;
+        }
+        changed
+    }
+    pub fn move_secondary_selection(&mut self, steps: usize, down: bool) -> bool {
+        let changed = if let Some(sel) = self.secondary_selected {
+            let new_idx = if down {
+                std::cmp::min(sel.saturating_add(steps), self.indices.len() - 1)
+            } else {
+                std::cmp::max(sel.saturating_sub(steps), 0)
+            };
+            self.secondary_selected = Some(new_idx);
+            true
+        } else if !self.text.is_empty() {
+            if let Some(sel) = self.selected {
+                let new_idx = if down {
+                    std::cmp::min(sel.saturating_add(steps), self.indices.len() - 1)
+                } else {
+                    std::cmp::max(sel.saturating_sub(steps), 0)
+                };
+                if new_idx != sel {
+                    self.secondary_selected = Some(new_idx);
+                    true
+                } else {
+                    false
+                }
+            } else {
+                false
+            }
+        } else {
+            false
+        };
+        if changed {
+            self.secondary_changed = true;
+        }
+        changed
     }
 }
 
 pub struct GraphView<'a> {
     block: Option<Block<'a>>,
     highlight_symbol: Option<&'a str>,
+    secondary_highlight_symbol: Option<&'a str>,
     style: Style,
 }
 
@@ -39,6 +99,7 @@ impl<'a> Default for GraphView<'a> {
             block: None,
             style: Style::default(),
             highlight_symbol: None,
+            secondary_highlight_symbol: None,
         }
     }
 }
@@ -53,8 +114,13 @@ impl<'a> GraphView<'a> {
         self
     }
 
-    pub fn highlight_symbol(mut self, highlight_symbol: &'a str) -> GraphView<'a> {
+    pub fn highlight_symbol(
+        mut self,
+        highlight_symbol: &'a str,
+        secondary_highlight_symbol: &'a str,
+    ) -> GraphView<'a> {
         self.highlight_symbol = Some(highlight_symbol);
+        self.secondary_highlight_symbol = Some(secondary_highlight_symbol);
         self
     }
 }
@@ -93,19 +159,32 @@ impl<'a> StatefulWidget for GraphView<'a> {
         let selected_row = state.selected.map(|idx| state.indices[idx]);
         let selected = selected_row.unwrap_or(0).min(state.text.len() - 1);
 
-        if selected >= end {
-            let diff = selected + 1 - end;
+        let secondary_selected_row = state.secondary_selected.map(|idx| state.indices[idx]);
+        let secondary_selected = secondary_selected_row
+            .unwrap_or(0)
+            .min(state.text.len() - 1);
+
+        let move_to_selected = if state.secondary_changed {
+            secondary_selected
+        } else {
+            selected
+        };
+
+        if move_to_selected >= end {
+            let diff = move_to_selected + 1 - end;
             end += diff;
             start += diff;
         }
-        if selected < start {
-            let diff = start - selected;
+        if move_to_selected < start {
+            let diff = start - move_to_selected;
             end -= diff;
             start -= diff;
         }
         state.offset = start;
 
         let highlight_symbol = self.highlight_symbol.unwrap_or("");
+        let secondary_highlight_symbol = self.secondary_highlight_symbol.unwrap_or("");
+
         let blank_symbol = iter::repeat(" ")
             .take(highlight_symbol.width())
             .collect::<String>();
@@ -122,9 +201,12 @@ impl<'a> StatefulWidget for GraphView<'a> {
             let (x, y) = (list_area.left(), list_area.top() + current_height as u16);
 
             let is_selected = selected_row.map(|s| s == i).unwrap_or(false);
+            let is_sec_selected = secondary_selected_row.map(|s| s == i).unwrap_or(false);
             let elem_x = {
                 let symbol = if is_selected {
                     highlight_symbol
+                } else if is_sec_selected {
+                    secondary_highlight_symbol
                 } else {
                     &blank_symbol
                 };

@@ -1,7 +1,7 @@
 use crate::app::{ActiveView, App};
 use crate::widgets::commit_view::CommitView;
+use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
-use crate::widgets::list::{FileList, FileListItem};
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Style};
@@ -63,7 +63,7 @@ fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
         block = block.border_type(BorderType::Thick);
     }
 
-    let graph = GraphView::default().block(block).highlight_symbol(">");
+    let graph = GraphView::default().block(block).highlight_symbol(">", "#");
 
     f.render_stateful_widget(graph, target, &mut app.graph_state);
 }
@@ -155,8 +155,10 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let paragraph = Paragraph::new(
         "Q                Quit\n\
          H                Show this help\n\
-         Up/Down          Navigate / scroll\n\
+         Up/Down          Select / navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\
+         Ctrl + Up/Down   Secondary selection (compare arbitrary commits)\n\
+         Return           Clear secondary selection\n\
          Home/End         Navigate to first/last\n\
          Left/Right       Change panel\n\
          Tab              Panel to fullscreen\n\

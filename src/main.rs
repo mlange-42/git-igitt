@@ -382,14 +382,21 @@ fn run(
                     app.toggle_layout();
                 }
 
-                KeyCode::Up => app.on_up(event.modifiers.contains(KeyModifiers::SHIFT))?,
-                KeyCode::Down => app.on_down(event.modifiers.contains(KeyModifiers::SHIFT))?,
+                KeyCode::Up => app.on_up(
+                    event.modifiers.contains(KeyModifiers::SHIFT),
+                    event.modifiers.contains(KeyModifiers::CONTROL),
+                )?,
+                KeyCode::Down => app.on_down(
+                    event.modifiers.contains(KeyModifiers::SHIFT),
+                    event.modifiers.contains(KeyModifiers::CONTROL),
+                )?,
                 KeyCode::Home => app.on_home()?,
                 KeyCode::End => app.on_end()?,
                 KeyCode::Left => app.on_left(),
                 KeyCode::Right => app.on_right(),
                 KeyCode::Tab => app.on_tab(),
                 KeyCode::Esc => app.on_esc(),
+                KeyCode::Enter => app.on_enter()?,
                 _ => {}
             },
             Event::Update => {

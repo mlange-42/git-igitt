@@ -1,7 +1,7 @@
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
+use crate::widgets::files_view::StatefulList;
 use crate::widgets::graph_view::GraphViewState;
-use crate::widgets::list::StatefulList;
 use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, Oid};
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
@@ -158,15 +158,15 @@ impl<'a> App<'a> {
         }
     }
 
-    pub fn on_up(&mut self, is_shift: bool) -> Result<(), String> {
+    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
         match self.active_view {
             ActiveView::Graph => {
                 let step = if is_shift { 10 } else { 1 };
-                if let Some(sel) = self.graph_state.selected {
-                    self.graph_state.selected = Some(std::cmp::max(sel.saturating_sub(step), 0));
-                    self.selection_changed()?;
-                } else if !self.graph_state.text.is_empty() {
-                    self.graph_state.selected = Some(0);
+                if is_ctrl {
+                    if self.graph_state.move_secondary_selection(step, false) {
+                        self.selection_changed()?;
+                    }
+                } else if self.graph_state.move_selection(step, false) {
                     self.selection_changed()?;
                 }
             }
@@ -194,18 +194,15 @@ impl<'a> App<'a> {
         Ok(())
     }
 
-    pub fn on_down(&mut self, is_shift: bool) -> Result<(), String> {
+    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
         match self.active_view {
             ActiveView::Graph => {
                 let step = if is_shift { 10 } else { 1 };
-                if let Some(sel) = self.graph_state.selected {
-                    self.graph_state.selected = Some(std::cmp::min(
-                        sel.saturating_add(step),
-                        self.graph_state.indices.len() - 1,
-                    ));
-                    self.selection_changed()?;
-                } else if !self.graph_state.indices.is_empty() {
-                    self.graph_state.selected = Some(0);
+                if is_ctrl {
+                    if self.graph_state.move_secondary_selection(step, true) {
+                        self.selection_changed()?;
+                    }
+                } else if self.graph_state.move_selection(step, true) {
                     self.selection_changed()?;
                 }
             }
@@ -271,6 +268,15 @@ impl<'a> App<'a> {
         }
     }
 
+    pub fn on_enter(&mut self) -> Result<(), String> {
+        if self.active_view == ActiveView::Graph && self.graph_state.secondary_selected.is_some() {
+            self.graph_state.secondary_selected = None;
+            self.graph_state.secondary_changed = false;
+            self.selection_changed()?;
+        }
+        Ok(())
+    }
+
     pub fn on_tab(&mut self) {
         self.is_fullscreen = !self.is_fullscreen;
     }
@@ -320,8 +326,24 @@ impl<'a> App<'a> {
                     let message_fmt =
                         crate::widgets::format::format(&commit, branches, hash_color)?;
 
+                    let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
+                        let sec_selected_info = graph.commits.get(sel);
+                        if let Some(info) = sec_selected_info {
+                            Some(
+                                graph
+                                    .repository
+                                    .find_commit(info.oid)
+                                    .map_err(|err| err.message().to_string())?,
+                            )
+                        } else {
+                            commit.parent(0).ok()
+                        }
+                    } else {
+                        commit.parent(0).ok()
+                    };
+
                     let mut diffs = vec![];
-                    if let Ok(parent) = commit.parent(0) {
+                    if let Some(parent) = compare_to {
                         let diff = graph
                             .repository
                             .diff_tree_to_tree(
@@ -384,9 +406,25 @@ impl<'a> App<'a> {
                                 .find_commit(info.oid)
                                 .map_err(|err| err.message().to_string())?;
 
-                            let selection = &state.diffs.items[sel_index];
+                            let compare_to = if let Some(sel) = self.graph_state.secondary_selected
+                            {
+                                let sec_selected_info = graph.commits.get(sel);
+                                if let Some(info) = sec_selected_info {
+                                    Some(
+                                        graph
+                                            .repository
+                                            .find_commit(info.oid)
+                                            .map_err(|err| err.message().to_string())?,
+                                    )
+                                } else {
+                                    commit.parent(0).ok()
+                                }
+                            } else {
+                                commit.parent(0).ok()
+                            };
 
-                            if let Ok(parent) = commit.parent(0) {
+                            let selection = &state.diffs.items[sel_index];
+                            if let Some(parent) = compare_to {
                                 let diff = graph
                                     .repository
                                     .diff_tree_to_tree(

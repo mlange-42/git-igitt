@@ -1,6 +1,6 @@
 use crate::app::DiffType;
 use crate::widgets::ctrl_chars::CtrlChars;
-use crate::widgets::list::StatefulList;
+use crate::widgets::files_view::StatefulList;
 use git2::Oid;
 use tui::buffer::Buffer;
 use tui::layout::Rect;
