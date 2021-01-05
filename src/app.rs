@@ -2,7 +2,7 @@ use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
 use crate::widgets::files_view::StatefulList;
 use crate::widgets::graph_view::GraphViewState;
-use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, Oid};
+use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, Oid};
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
@@ -269,7 +269,7 @@ impl<'a> App<'a> {
     }
 
     pub fn on_enter(&mut self) -> Result<(), String> {
-        if self.active_view == ActiveView::Graph && self.graph_state.secondary_selected.is_some() {
+        if self.graph_state.secondary_selected.is_some() {
             self.graph_state.secondary_selected = None;
             self.graph_state.secondary_changed = false;
             self.selection_changed()?;
@@ -363,8 +363,12 @@ impl<'a> App<'a> {
                                     return false;
                                 }
                             };
+                            let f = match tp {
+                                DiffType::Deleted | DiffType::Modified => d.old_file(),
+                                DiffType::Added | DiffType::Renamed => d.new_file(),
+                            };
                             diffs.push((
-                                content[1..].to_string(),
+                                f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
                                 tp,
                                 d.old_file().id(),
                                 d.new_file().id(),
@@ -424,6 +428,11 @@ impl<'a> App<'a> {
                             };
 
                             let selection = &state.diffs.items[sel_index];
+
+                            let mut opts = DiffOptions::new();
+
+                            opts.pathspec(&selection.0);
+                            opts.disable_pathspec_match(true);
                             if let Some(parent) = compare_to {
                                 let diff = graph
                                     .repository
@@ -438,7 +447,7 @@ impl<'a> App<'a> {
                                                 .tree()
                                                 .map_err(|err| err.message().to_string())?,
                                         ),
-                                        None,
+                                        Some(&mut opts),
                                     )
                                     .map_err(|err| err.message().to_string())?;
 
@@ -446,16 +455,12 @@ impl<'a> App<'a> {
                                 let mut diffs = vec![];
 
                                 diff.print(DiffFormat::Patch, |d, h, l| {
-                                    if d.old_file().id() == selection.2
-                                        && d.new_file().id() == selection.3
-                                    {
-                                        match print_diff_line(d, h, l) {
-                                            Ok(line) => diffs.push(line),
-                                            Err(err) => {
-                                                diff_error = Err(err.to_string());
-                                                return false;
-                                            }
-                                        };
+                                    match print_diff_line(d, h, l) {
+                                        Ok(line) => diffs.push(line),
+                                        Err(err) => {
+                                            diff_error = Err(err.to_string());
+                                            return false;
+                                        }
                                     }
                                     true
                                 })
