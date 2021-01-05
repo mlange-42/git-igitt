@@ -1,4 +1,6 @@
+use crate::app::DiffType;
 use crate::widgets::ctrl_chars::CtrlChars;
+use crate::widgets::list::StatefulList;
 use git2::Oid;
 use tui::buffer::Buffer;
 use tui::layout::Rect;
@@ -17,13 +19,15 @@ impl Default for CommitViewState {
 
 pub struct CommitViewInfo {
     pub text: Vec<String>,
+    pub diffs: StatefulList<(String, DiffType)>,
     pub oid: Oid,
     pub scroll: u16,
 }
 impl CommitViewInfo {
-    pub fn new(text: Vec<String>, oid: Oid) -> Self {
+    pub fn new(text: Vec<String>, diffs: StatefulList<(String, DiffType)>, oid: Oid) -> Self {
         Self {
             text,
+            diffs,
             oid,
             scroll: 0,
         }

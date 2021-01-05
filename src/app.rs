@@ -1,9 +1,12 @@
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::graph_view::GraphViewState;
-use git2::Oid;
+use crate::widgets::list::StatefulList;
+use git2::{DiffFormat, DiffOptions, Oid};
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
+use std::str::FromStr;
+use tui::style::Color;
 
 const HASH_COLOR: u8 = 11;
 
@@ -14,6 +17,51 @@ pub enum ActiveView {
     Files,
     Diff,
     Help(u16),
+}
+
+pub enum DiffType {
+    Added,
+    Deleted,
+    Modified,
+    Renamed,
+}
+
+impl FromStr for DiffType {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let tp = match s {
+            "A" => DiffType::Added,
+            "D" => DiffType::Deleted,
+            "M" => DiffType::Modified,
+            "R" => DiffType::Renamed,
+            other => return Err(format!("Unknown diff type {}", other)),
+        };
+        Ok(tp)
+    }
+}
+
+impl ToString for DiffType {
+    fn to_string(&self) -> String {
+        match self {
+            DiffType::Added => "+",
+            DiffType::Deleted => "-",
+            DiffType::Modified => "~",
+            DiffType::Renamed => "r",
+        }
+        .to_string()
+    }
+}
+
+impl DiffType {
+    pub fn to_color(&self) -> Color {
+        match self {
+            DiffType::Added => Color::LightGreen,
+            DiffType::Deleted => Color::LightRed,
+            DiffType::Modified => Color::LightYellow,
+            DiffType::Renamed => Color::LightBlue,
+        }
+    }
 }
 
 pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
@@ -126,6 +174,11 @@ impl<'a> App<'a> {
                     content.scroll = content.scroll.saturating_sub(1);
                 }
             }
+            ActiveView::Files => {
+                if let Some(content) = &mut self.commit_state.content {
+                    content.diffs.previous();
+                }
+            }
             _ => {}
         }
         Ok(())
@@ -152,6 +205,11 @@ impl<'a> App<'a> {
             ActiveView::Commit => {
                 if let Some(content) = &mut self.commit_state.content {
                     content.scroll = content.scroll.saturating_add(1);
+                }
+            }
+            ActiveView::Files => {
+                if let Some(content) = &mut self.commit_state.content {
+                    content.diffs.next();
                 }
             }
             _ => {}
@@ -246,7 +304,41 @@ impl<'a> App<'a> {
                     let message_fmt =
                         crate::widgets::format::format(&commit, branches, hash_color)?;
 
-                    self.commit_state.content = Some(CommitViewInfo::new(message_fmt, info.oid));
+                    let mut diffs = vec![];
+                    let mut diff_err = Ok(());
+                    if let Ok(parent) = commit.parent(0) {
+                        let mut opts = DiffOptions::new();
+                        let diff = graph
+                            .repository
+                            .diff_tree_to_tree(
+                                Some(&parent.tree().map_err(|err| err.message().to_string())?),
+                                Some(&commit.tree().map_err(|err| err.message().to_string())?),
+                                Some(&mut opts),
+                            )
+                            .map_err(|err| err.message().to_string())?;
+
+                        diff.print(DiffFormat::NameStatus, |_d, _h, l| {
+                            let content = std::str::from_utf8(l.content()).unwrap();
+                            let tp = match DiffType::from_str(&content[..1]) {
+                                Ok(tp) => tp,
+                                Err(err) => {
+                                    diff_err = Err(err);
+                                    return false;
+                                }
+                            };
+                            diffs.push((content[1..].to_string(), tp));
+                            true
+                        })
+                        .map_err(|err| err.message().to_string())?;
+
+                        diff_err?;
+                    }
+
+                    self.commit_state.content = Some(CommitViewInfo::new(
+                        message_fmt,
+                        StatefulList::with_items(diffs),
+                        info.oid,
+                    ));
                 } else {
                     self.commit_state.content = None;
                 }

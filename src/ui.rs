@@ -3,7 +3,9 @@ use crate::widgets::commit_view::CommitView;
 use crate::widgets::graph_view::GraphView;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::widgets::{Block, BorderType, Borders, Paragraph};
+use tui::style::Style;
+use tui::text::Text;
+use tui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
@@ -81,8 +83,23 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if app.active_view == ActiveView::Files {
         block = block.border_type(BorderType::Thick);
     }
-
-    f.render_widget(block, target);
+    if let Some(state) = &mut app.commit_state.content {
+        let items: Vec<_> = state
+            .diffs
+            .items
+            .iter()
+            .map(|item| {
+                ListItem::new(Text::styled(
+                    format!("{} {}", item.1.to_string(), item.0),
+                    Style::default().fg(item.1.to_color()),
+                ))
+            })
+            .collect();
+        let list = List::new(items).block(block).highlight_symbol("> ");
+        f.render_stateful_widget(list, target, &mut state.diffs.state);
+    } else {
+        f.render_widget(block, target);
+    }
 }
 
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
