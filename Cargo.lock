@@ -187,7 +187,8 @@ dependencies = [
 
 [[package]]
 name = "git-graph"
-version = "0.1.7"
+version = "0.2.0"
+source = "git+https://github.com/mlange-42/git-graph?tag=0.2.0#24ea146e311a10a6ae78039c2f9fc5760378e8b3"
 dependencies = [
  "atty",
  "chrono",
