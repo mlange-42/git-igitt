@@ -17,10 +17,12 @@ use git_graph::settings::{
     BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, Settings,
 };
 use git_igitt::app::{App, CurrentBranches};
+use git_igitt::dialogs::FileDialog;
 use git_igitt::ui;
 use platform_dirs::AppDirs;
 use std::error::Error;
 use std::io::stdout;
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tui::{backend::CrosstermBackend, Terminal};
@@ -257,13 +259,6 @@ fn from_args() -> Result<(), String> {
 
     let model = matches.value_of("model");
 
-    /*get_model(
-        &repository,
-        matches.value_of("model"),
-        REPO_CONFIG_FILE,
-        &models_dir,
-    )?;*/
-
     let format = match matches.value_of("format") {
         None => CommitFormat::OneLine,
         Some(str) => CommitFormat::from_str(str)?,
@@ -311,7 +306,7 @@ fn from_args() -> Result<(), String> {
 }
 
 fn run(
-    repository: Option<Repository>,
+    mut repository: Option<Repository>,
     mut settings: Settings,
     model: Option<&str>,
     max_commits: Option<usize>,
@@ -329,25 +324,15 @@ fn run(
     let tick_rate = Duration::from_millis(TICK_RATE);
     let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
 
-    let mut app = if let Some(repository) = repository {
-        let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
-        let mut models_dir = app_dir;
-        models_dir.push("models");
-
-        let the_model = get_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?;
-        settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
-
-        let graph = GitGraph::new(repository, &settings, max_commits)?;
-        let branches = get_branches(&graph)?;
-        let (lines, indices) = print_unicode(&graph, &settings)?;
-
-        App::new("git-igitt", true)
-            .with_graph(graph, lines, indices)
-            .with_branches(branches)
-            .with_color(settings.colored)
+    let mut app = if let Some(repository) = repository.take() {
+        Some(create_app(repository, &mut settings, model, max_commits)?)
     } else {
-        App::new("git-igitt", true).with_color(settings.colored)
+        None
     };
+
+    let mut file_dialog =
+        FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
+    file_dialog.selection_changed()?;
 
     std::thread::spawn(move || {
         let mut last_update = Instant::now();
@@ -378,59 +363,176 @@ fn run(
     terminal.clear()?;
 
     loop {
-        terminal.draw(|f| ui::draw(f, &mut app))?;
-        match rx.recv()? {
-            Event::Input(event) => match event.code {
-                KeyCode::Char('q') => {
-                    disable_raw_mode()?;
-                    execute!(
-                        terminal.backend_mut(),
-                        LeaveAlternateScreen,
-                        DisableMouseCapture
-                    )?;
-                    terminal.show_cursor()?;
-                    break;
-                }
-                KeyCode::Char('h') | KeyCode::F(1) => {
-                    app.show_help();
-                }
-                KeyCode::Char('r') => {
-                    app = app.reload(&settings, max_commits)?;
-                }
-                KeyCode::Char('l') => {
-                    app.toggle_layout();
-                }
+        app = if let Some(mut app) = app.take() {
+            terminal.draw(|f| ui::draw(f, &mut app))?;
 
-                KeyCode::Up => app.on_up(
-                    event.modifiers.contains(KeyModifiers::SHIFT),
-                    event.modifiers.contains(KeyModifiers::CONTROL),
-                )?,
-                KeyCode::Down => app.on_down(
-                    event.modifiers.contains(KeyModifiers::SHIFT),
-                    event.modifiers.contains(KeyModifiers::CONTROL),
-                )?,
-                KeyCode::Home => app.on_home()?,
-                KeyCode::End => app.on_end()?,
-                KeyCode::Left => app.on_left(),
-                KeyCode::Right => app.on_right(),
-                KeyCode::Tab => app.on_tab(),
-                KeyCode::Esc => app.on_esc(),
-                KeyCode::Enter => app.on_enter()?,
-                _ => {}
-            },
-            Event::Update => {
-                if app.graph_state.graph.is_some() && has_changed(&mut app)? {
-                    app = app.reload(&settings, max_commits)?;
+            let mut open_file = false;
+            match rx.recv()? {
+                Event::Input(event) => match event.code {
+                    KeyCode::Char('q') => {
+                        disable_raw_mode()?;
+                        execute!(
+                            terminal.backend_mut(),
+                            LeaveAlternateScreen,
+                            DisableMouseCapture
+                        )?;
+                        terminal.show_cursor()?;
+                        break;
+                    }
+                    KeyCode::Char('h') | KeyCode::F(1) => {
+                        app.show_help();
+                    }
+                    KeyCode::Char('r') => {
+                        app = app.reload(&settings, max_commits)?;
+                    }
+                    KeyCode::Char('l') => {
+                        app.toggle_layout();
+                    }
+                    KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if let Some(graph) = &app.graph_state.graph {
+                            let path = graph.repository.path();
+                            let path = path.parent().unwrap_or(path);
+                            file_dialog.location = PathBuf::from(path.parent().unwrap_or(path));
+                            file_dialog.selection = Some(PathBuf::from(path));
+                        } else {
+                            file_dialog.location = std::env::current_dir()?;
+                            file_dialog.selection = None
+                        }
+                        open_file = true;
+                    }
+
+                    KeyCode::Up => app.on_up(
+                        event.modifiers.contains(KeyModifiers::SHIFT),
+                        event.modifiers.contains(KeyModifiers::CONTROL),
+                    )?,
+                    KeyCode::Down => app.on_down(
+                        event.modifiers.contains(KeyModifiers::SHIFT),
+                        event.modifiers.contains(KeyModifiers::CONTROL),
+                    )?,
+                    KeyCode::Home => app.on_home()?,
+                    KeyCode::End => app.on_end()?,
+                    KeyCode::Left => app.on_left(),
+                    KeyCode::Right => app.on_right(),
+                    KeyCode::Tab => app.on_tab(),
+                    KeyCode::Esc => app.on_esc(),
+                    KeyCode::Enter => app.on_enter()?,
+                    _ => {}
+                },
+                Event::Update => {
+                    if app.graph_state.graph.is_some() && has_changed(&mut app)? {
+                        app = app.reload(&settings, max_commits)?;
+                    }
                 }
+                Event::Tick => {}
             }
-            Event::Tick => {}
-        }
-        if app.should_quit {
-            break;
+            if app.should_quit {
+                break;
+            }
+            if open_file {
+                file_dialog.selection_changed()?;
+                None
+            } else {
+                Some(app)
+            }
+        } else {
+            terminal.draw(|f| ui::draw_open_repo(f, &mut file_dialog))?;
+
+            let mut app = None;
+            match rx.recv()? {
+                Event::Input(event) => {
+                    match event.code {
+                        KeyCode::Char('q') => {
+                            disable_raw_mode()?;
+                            execute!(
+                                terminal.backend_mut(),
+                                LeaveAlternateScreen,
+                                DisableMouseCapture
+                            )?;
+                            terminal.show_cursor()?;
+                            break;
+                        }
+                        KeyCode::Esc => {
+                            if let Some(path) = &file_dialog.selection {
+                                match get_repo(path) {
+                                    Ok(repo) => {
+                                        app = Some(create_app(
+                                            repo,
+                                            &mut settings,
+                                            model,
+                                            max_commits,
+                                        )?)
+                                    }
+                                    Err(_) => {
+                                        file_dialog.error_message = Some(format!(
+                                            "Not a Git repository: {}",
+                                            path.display()
+                                        ));
+                                    }
+                                };
+                            }
+                        }
+                        KeyCode::Up => file_dialog.on_up(),
+                        KeyCode::Down => file_dialog.on_down(),
+                        KeyCode::Left => file_dialog.on_left()?,
+                        KeyCode::Right => file_dialog.on_right()?,
+                        KeyCode::Enter => {
+                            if file_dialog.error_message.is_some() {
+                                file_dialog.dismiss_error();
+                            } else {
+                                file_dialog.on_enter();
+                                if let Some(path) = &file_dialog.selection {
+                                    match get_repo(path) {
+                                        Ok(repo) => {
+                                            app = Some(create_app(
+                                                repo,
+                                                &mut settings,
+                                                model,
+                                                max_commits,
+                                            )?)
+                                        }
+                                        Err(_) => {
+                                            file_dialog.error_message = Some(format!(
+                                                "Not a Git repository: {}",
+                                                path.display()
+                                            ));
+                                        }
+                                    };
+                                }
+                            }
+                        }
+                        _ => {}
+                    };
+                }
+                _ => {}
+            }
+            app
         }
     }
 
     Ok(())
+}
+
+fn create_app<'a>(
+    repository: Repository,
+    settings: &mut Settings,
+    model: Option<&str>,
+    max_commits: Option<usize>,
+) -> Result<App<'a>, String> {
+    let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
+    let mut models_dir = app_dir;
+    models_dir.push("models");
+
+    let the_model = get_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?;
+    settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
+
+    let graph = GitGraph::new(repository, &settings, max_commits)?;
+    let branches = get_branches(&graph)?;
+    let (lines, indices) = print_unicode(&graph, &settings)?;
+
+    Ok(App::new("git-igitt")
+        .with_graph(graph, lines, indices)
+        .with_branches(branches)
+        .with_color(settings.colored))
 }
 
 fn has_changed(app: &mut App) -> Result<bool, String> {

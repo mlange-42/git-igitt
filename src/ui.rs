@@ -1,4 +1,5 @@
 use crate::app::{ActiveView, App};
+use crate::dialogs::FileDialog;
 use crate::widgets::commit_view::CommitView;
 use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
@@ -6,9 +7,47 @@ use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 
+pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
+    if let Some(error) = &dialog.error_message {
+        draw_error(f, f.size(), error);
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(0)].as_ref())
+            .split(f.size());
+
+        let top_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+            .split(chunks[0]);
+
+        let location_block = Block::default().borders(Borders::ALL).title(" Path ");
+
+        let paragraph =
+            Paragraph::new(format!("{}", &dialog.location.display())).block(location_block);
+        f.render_widget(paragraph, top_chunks[0]);
+
+        let help = Paragraph::new("  Navigate with Arrows, confirm with Enter.");
+        f.render_widget(help, top_chunks[1]);
+
+        let list_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Open repository ");
+
+        let items: Vec<_> = dialog.dirs.iter().map(|f| ListItem::new(&f[..])).collect();
+
+        let mut list = List::new(items).block(list_block).highlight_symbol("> ");
+
+        if dialog.color {
+            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        }
+
+        f.render_stateful_widget(list, chunks[1], &mut dialog.state);
+    }
+}
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     if let ActiveView::Help(scroll) = app.active_view {
         draw_help(f, f.size(), scroll);
@@ -188,8 +227,9 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let block = Block::default().borders(Borders::ALL).title(" Help ");
 
     let paragraph = Paragraph::new(
-        "Q                Quit\n\
-         H/F1             Show this help\n\
+        "F1/H             Show this help\n\
+         Q                Quit\n\
+         Ctrl + O         Open repository\n\
          \n\
          Up/Down          Select / navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\
@@ -206,6 +246,14 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     )
     .block(block)
     .scroll((scroll, 0));
+
+    f.render_widget(paragraph, target);
+}
+
+fn draw_error<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str) {
+    let block = Block::default().borders(Borders::ALL).title(" Error ");
+
+    let paragraph = Paragraph::new(error).block(block);
 
     f.render_widget(paragraph, target);
 }

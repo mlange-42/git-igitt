@@ -42,7 +42,7 @@ cargo install --git https://github.com/mlange-42/git-igitt
 
 **For detailed information, see the [git-graph manual](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md).**
 
-For basic usage, run the following command inside a Git repository's folder:
+For basic usage, run the following command:
 
 ```
 git-igitt
@@ -54,6 +54,8 @@ git-igitt
 > C:/path/to/git-igitt/git-igitt
 > ```
 
+If the git-igitt is started inside a Git repository's folder, this repository will be displayed. Otherwise, a file dialog will appear that let's you select a repository.
+
 **Branching models**
 
 Run git-graph with a specific model, e.g. `simple`:
@@ -62,7 +64,7 @@ Run git-graph with a specific model, e.g. `simple`:
 git-igitt --model simple
 ```
 
-Alternatively, set the model for the current repository permanently:
+Alternatively, set the model for the repository in the current path permanently:
 
 ```
 git-igitt model simple

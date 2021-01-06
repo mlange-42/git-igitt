@@ -79,12 +79,11 @@ pub struct App<'a> {
     pub is_fullscreen: bool,
     pub horizontal_split: bool,
     pub color: bool,
-    pub enhanced_graphics: bool,
     pub should_quit: bool,
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str, enhanced_graphics: bool) -> App<'a> {
+    pub fn new(title: &'a str) -> App<'a> {
         App {
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
@@ -96,7 +95,6 @@ impl<'a> App<'a> {
             is_fullscreen: false,
             horizontal_split: true,
             color: true,
-            enhanced_graphics,
             should_quit: false,
         }
     }
