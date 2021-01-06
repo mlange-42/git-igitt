@@ -1,17 +1,70 @@
 use crate::app::{ActiveView, App};
+use crate::dialogs::FileDialog;
 use crate::widgets::commit_view::CommitView;
 use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
+use crate::widgets::models_view::ModelListState;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Style};
+use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
 use tui::Frame;
 
+pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
+    if let Some(error) = &dialog.error_message {
+        draw_error(f, f.size(), error);
+    } else {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(4), Constraint::Min(0)].as_ref())
+            .split(f.size());
+
+        let top_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+            .split(chunks[0]);
+
+        let location_block = Block::default().borders(Borders::ALL).title(" Path ");
+
+        let paragraph =
+            Paragraph::new(format!("{}", &dialog.location.display())).block(location_block);
+        f.render_widget(paragraph, top_chunks[0]);
+
+        let help = Paragraph::new("  Navigate with Arrows, confirm with Enter.");
+        f.render_widget(help, top_chunks[1]);
+
+        let list_block = Block::default()
+            .borders(Borders::ALL)
+            .title(" Open repository ");
+
+        let items: Vec<_> = dialog.dirs.iter().map(|f| ListItem::new(&f[..])).collect();
+
+        let mut list = List::new(items).block(list_block).highlight_symbol("> ");
+
+        if dialog.color {
+            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        }
+
+        f.render_stateful_widget(list, chunks[1], &mut dialog.state);
+    }
+}
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     if let ActiveView::Help(scroll) = app.active_view {
         draw_help(f, f.size(), scroll);
+        return;
+    }
+
+    if let (ActiveView::Models, Some(model_state)) = (&app.active_view, &mut app.models_state) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
+            .split(f.size());
+
+        let help = Paragraph::new("  Enter = confirm, P = permanent, Esc = abort.");
+        f.render_widget(help, chunks[0]);
+
+        draw_models(f, chunks[1], app.color, model_state);
         return;
     }
 
@@ -21,7 +74,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             ActiveView::Commit => draw_commit(f, f.size(), app),
             ActiveView::Files => draw_files(f, f.size(), app),
             ActiveView::Diff => draw_diff(f, f.size(), app),
-            ActiveView::Help(_) => {}
+            _ => {}
         }
     } else {
         let base_split = if app.horizontal_split {
@@ -58,18 +111,22 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     let mut block = Block::default()
         .borders(Borders::ALL)
-        .title("Graph - H for help");
+        .title(format!(" Graph - {} ", app.repo_name));
     if app.active_view == ActiveView::Graph {
         block = block.border_type(BorderType::Thick);
     }
 
-    let graph = GraphView::default().block(block).highlight_symbol(">", "#");
+    let mut graph = GraphView::default().block(block).highlight_symbol(">", "#");
+
+    if app.color {
+        graph = graph.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    }
 
     f.render_stateful_widget(graph, target, &mut app.graph_state);
 }
 
 fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Commit");
+    let mut block = Block::default().borders(Borders::ALL).title(" Commit ");
     if app.active_view == ActiveView::Commit {
         block = block.border_type(BorderType::Thick);
     }
@@ -80,12 +137,17 @@ fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 }
 
 fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Files");
-    if app.active_view == ActiveView::Files {
-        block = block.border_type(BorderType::Thick);
-    }
     let color = app.color;
     if let Some(state) = &mut app.commit_state.content {
+        let mut block = Block::default().borders(Borders::ALL).title(format!(
+            " Files ({}..{}) ",
+            &state.compare_oid.to_string()[..7],
+            &state.oid.to_string()[..7]
+        ));
+        if app.active_view == ActiveView::Files {
+            block = block.border_type(BorderType::Thick);
+        }
+
         let items: Vec<_> = state
             .diffs
             .items
@@ -101,27 +163,42 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                 })
             })
             .collect();
-        let list = FileList::new(items).block(block).highlight_symbol("> ");
+
+        let mut list = FileList::new(items).block(block).highlight_symbol("> ");
+
+        if color {
+            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        }
+
         f.render_stateful_widget(list, target, &mut state.diffs.state);
     } else {
+        let mut block = Block::default().borders(Borders::ALL).title("Files");
+        if app.active_view == ActiveView::Files {
+            block = block.border_type(BorderType::Thick);
+        }
         f.render_widget(block, target);
     }
 }
 
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Diff");
-    if app.active_view == ActiveView::Diff {
-        block = block.border_type(BorderType::Thick);
-    }
-    let styles = [
-        Style::default().fg(Color::LightGreen),
-        Style::default().fg(Color::LightRed),
-        Style::default().fg(Color::LightBlue),
-        Style::default(),
-    ];
     if let Some(state) = &app.diff_state.content {
+        let mut block = Block::default().borders(Borders::ALL).title(format!(
+            " Diff ({}..{}) ",
+            &state.compare_oid.to_string()[..7],
+            &state.oid.to_string()[..7]
+        ));
+        if app.active_view == ActiveView::Diff {
+            block = block.border_type(BorderType::Thick);
+        }
+
         let scroll = state.scroll;
 
+        let styles = [
+            Style::default().fg(Color::LightGreen),
+            Style::default().fg(Color::LightRed),
+            Style::default().fg(Color::LightBlue),
+            Style::default(),
+        ];
         let mut text = Text::from("");
         for line in &state.diffs {
             if let Some(pos) = line.find(" @@ ") {
@@ -137,6 +214,10 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_widget(paragraph, target);
     } else {
+        let mut block = Block::default().borders(Borders::ALL).title(" Diff ");
+        if app.active_view == ActiveView::Diff {
+            block = block.border_type(BorderType::Thick);
+        }
         f.render_widget(block, target);
     }
 }
@@ -158,12 +239,35 @@ fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Te
     }
 }
 
+fn draw_models<B: Backend>(
+    f: &mut Frame<B>,
+    target: Rect,
+    color: bool,
+    state: &mut ModelListState,
+) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Branching model ");
+
+    let items: Vec<_> = state.models.iter().map(|m| ListItem::new(&m[..])).collect();
+
+    let mut list = List::new(items).block(block).highlight_symbol("> ");
+
+    if color {
+        list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    }
+
+    f.render_stateful_widget(list, target, &mut state.state);
+}
+
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
-    let block = Block::default().borders(Borders::ALL).title("Help");
+    let block = Block::default().borders(Borders::ALL).title(" Help ");
 
     let paragraph = Paragraph::new(
-        "Q                Quit\n\
-         H/F1             Show this help\n\
+        "F1/H             Show this help\n\
+         Q                Quit\n\
+         Ctrl + O         Open repository\n\
+         M                Set branching model\n\
          \n\
          Up/Down          Select / navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\
@@ -180,6 +284,14 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     )
     .block(block)
     .scroll((scroll, 0));
+
+    f.render_widget(paragraph, target);
+}
+
+fn draw_error<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str) {
+    let block = Block::default().borders(Borders::ALL).title(" Error ");
+
+    let paragraph = Paragraph::new(error).block(block);
 
     f.render_widget(paragraph, target);
 }

@@ -2,11 +2,14 @@ use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
 use crate::widgets::files_view::StatefulList;
 use crate::widgets::graph_view::GraphViewState;
+use crate::widgets::models_view::ModelListState;
 use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, Oid};
+use git_graph::config::get_available_models;
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
 use std::fmt::{Error, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 use tui::style::Color;
 
@@ -18,6 +21,7 @@ pub enum ActiveView {
     Commit,
     Files,
     Diff,
+    Models,
     Help(u16),
 }
 
@@ -68,62 +72,61 @@ impl DiffType {
 
 pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 
-pub struct App<'a> {
+pub struct App {
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
     pub diff_state: DiffViewState,
-    pub title: &'a str,
+    pub models_state: Option<ModelListState>,
+    pub title: String,
+    pub repo_name: String,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
     pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
     pub is_fullscreen: bool,
     pub horizontal_split: bool,
     pub color: bool,
-    pub enhanced_graphics: bool,
     pub should_quit: bool,
+    pub models_path: PathBuf,
 }
 
-impl<'a> App<'a> {
-    pub fn new(title: &'a str, enhanced_graphics: bool) -> App<'a> {
+impl App {
+    pub fn new(title: String, repo_name: String, models_path: PathBuf) -> App {
         App {
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
             diff_state: DiffViewState::default(),
+            models_state: None,
             title,
+            repo_name,
             active_view: ActiveView::Graph,
             prev_active_view: None,
             curr_branches: vec![],
             is_fullscreen: false,
             horizontal_split: true,
             color: true,
-            enhanced_graphics,
             should_quit: false,
+            models_path,
         }
     }
 
-    pub fn with_graph(
-        mut self,
-        graph: GitGraph,
-        text: Vec<String>,
-        indices: Vec<usize>,
-    ) -> App<'a> {
+    pub fn with_graph(mut self, graph: GitGraph, text: Vec<String>, indices: Vec<usize>) -> App {
         self.graph_state.graph = Some(graph);
         self.graph_state.text = text;
         self.graph_state.indices = indices;
         self
     }
 
-    pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App<'a> {
+    pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App {
         self.curr_branches = branches;
         self
     }
 
-    pub fn with_color(mut self, color: bool) -> App<'a> {
+    pub fn with_color(mut self, color: bool) -> App {
         self.color = color;
         self
     }
 
-    pub fn clear_graph(mut self) -> App<'a> {
+    pub fn clear_graph(mut self) -> App {
         self.graph_state.graph = None;
         self.graph_state.text = vec![];
         self.graph_state.indices = vec![];
@@ -134,7 +137,7 @@ impl<'a> App<'a> {
         mut self,
         settings: &Settings,
         max_commits: Option<usize>,
-    ) -> Result<App<'a>, String> {
+    ) -> Result<App, String> {
         let selected = self.graph_state.selected;
         let mut temp = None;
         std::mem::swap(&mut temp, &mut self.graph_state.graph);
@@ -190,6 +193,11 @@ impl<'a> App<'a> {
                     content.scroll = content.scroll.saturating_sub(step);
                 }
             }
+            ActiveView::Models => {
+                if let Some(state) = &mut self.models_state {
+                    state.previous()
+                }
+            }
         }
         Ok(())
     }
@@ -226,6 +234,11 @@ impl<'a> App<'a> {
                     content.scroll = content.scroll.saturating_add(step);
                 }
             }
+            ActiveView::Models => {
+                if let Some(state) = &mut self.models_state {
+                    state.next()
+                }
+            }
         }
         Ok(())
     }
@@ -256,6 +269,7 @@ impl<'a> App<'a> {
             ActiveView::Files => ActiveView::Diff,
             ActiveView::Diff => ActiveView::Diff,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+            ActiveView::Models => ActiveView::Models,
         }
     }
     pub fn on_left(&mut self) {
@@ -265,14 +279,22 @@ impl<'a> App<'a> {
             ActiveView::Files => ActiveView::Commit,
             ActiveView::Diff => ActiveView::Files,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+            ActiveView::Models => ActiveView::Models,
         }
     }
 
     pub fn on_enter(&mut self) -> Result<(), String> {
-        if self.graph_state.secondary_selected.is_some() {
-            self.graph_state.secondary_selected = None;
-            self.graph_state.secondary_changed = false;
-            self.selection_changed()?;
+        match &self.active_view {
+            ActiveView::Help(_) => {
+                self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph)
+            }
+            _ => {
+                if self.graph_state.secondary_selected.is_some() {
+                    self.graph_state.secondary_selected = None;
+                    self.graph_state.secondary_changed = false;
+                    self.selection_changed()?;
+                }
+            }
         }
         Ok(())
     }
@@ -283,6 +305,8 @@ impl<'a> App<'a> {
 
     pub fn on_esc(&mut self) {
         if let ActiveView::Help(_) = self.active_view {
+            self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
+        } else if let ActiveView::Models = self.active_view {
             self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
         } else {
             self.active_view = ActiveView::Graph;
@@ -301,6 +325,19 @@ impl<'a> App<'a> {
             std::mem::swap(&mut temp, &mut self.active_view);
             self.prev_active_view = Some(temp);
         }
+    }
+
+    pub fn select_model(&mut self) -> Result<(), String> {
+        if let ActiveView::Models = self.active_view {
+        } else {
+            let mut temp = ActiveView::Models;
+            std::mem::swap(&mut temp, &mut self.active_view);
+            self.prev_active_view = Some(temp);
+
+            let models = get_available_models(&self.models_path)?;
+            self.models_state = Some(ModelListState::new(models, self.color));
+        }
+        Ok(())
     }
 
     fn selection_changed(&mut self) -> Result<(), String> {
@@ -370,21 +407,22 @@ impl<'a> App<'a> {
                             diffs.push((
                                 f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
                                 tp,
-                                d.old_file().id(),
-                                d.new_file().id(),
                             ));
                             true
                         })
                         .map_err(|err| err.message().to_string())?;
 
                         diff_err?;
-                    }
 
-                    self.commit_state.content = Some(CommitViewInfo::new(
-                        message_fmt,
-                        StatefulList::with_items(diffs),
-                        info.oid,
-                    ));
+                        self.commit_state.content = Some(CommitViewInfo::new(
+                            message_fmt,
+                            StatefulList::with_items(diffs),
+                            info.oid,
+                            parent.id(),
+                        ));
+                    } else {
+                        self.commit_state.content = None;
+                    }
                 } else {
                     self.commit_state.content = None;
                 }
@@ -467,7 +505,8 @@ impl<'a> App<'a> {
                                 .map_err(|err| err.message().to_string())?;
                                 diff_error?;
 
-                                self.diff_state.content = Some(DiffViewInfo::new(diffs));
+                                self.diff_state.content =
+                                    Some(DiffViewInfo::new(diffs, info.oid, parent.id()));
                             }
                         }
                     }

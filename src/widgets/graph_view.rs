@@ -91,6 +91,7 @@ pub struct GraphView<'a> {
     highlight_symbol: Option<&'a str>,
     secondary_highlight_symbol: Option<&'a str>,
     style: Style,
+    highlight_style: Style,
 }
 
 impl<'a> Default for GraphView<'a> {
@@ -100,6 +101,7 @@ impl<'a> Default for GraphView<'a> {
             style: Style::default(),
             highlight_symbol: None,
             secondary_highlight_symbol: None,
+            highlight_style: Style::default(),
         }
     }
 }
@@ -121,6 +123,11 @@ impl<'a> GraphView<'a> {
     ) -> GraphView<'a> {
         self.highlight_symbol = Some(highlight_symbol);
         self.secondary_highlight_symbol = Some(secondary_highlight_symbol);
+        self
+    }
+
+    pub fn highlight_style(mut self, style: Style) -> GraphView<'a> {
+        self.highlight_style = style;
         self
     }
 }
@@ -214,6 +221,13 @@ impl<'a> StatefulWidget for GraphView<'a> {
                 x
             };
 
+            let area = Rect {
+                x,
+                y,
+                width: list_area.width,
+                height: 1,
+            };
+
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
 
             let body = CtrlChars::parse(item).into_text();
@@ -229,6 +243,10 @@ impl<'a> StatefulWidget for GraphView<'a> {
                     x = pos.0;
                     remaining_width = remaining_width.saturating_sub(w);
                 }
+            }
+
+            if is_selected || is_sec_selected {
+                buf.set_style(area, self.highlight_style);
             }
         }
     }
