@@ -13,7 +13,9 @@ use git_graph::get_repo;
 use git_graph::graph::GitGraph;
 use git_graph::print::format::CommitFormat;
 use git_graph::print::unicode::print_unicode;
-use git_graph::settings::{BranchOrder, BranchSettings, Characters, MergePatterns, Settings};
+use git_graph::settings::{
+    BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, Settings,
+};
 use git_igitt::app::{App, CurrentBranches};
 use git_igitt::ui;
 use platform_dirs::AppDirs;
@@ -210,21 +212,26 @@ fn from_args() -> Result<(), String> {
     }
 
     let path = matches.value_of("path").unwrap_or(".");
-    let repository = get_repo(path)
-        .map_err(|err| format!("ERROR: {}\n       Navigate into a repository before running git-graph, or use option --path", err.message()))?;
+
+    let repository = get_repo(path);
 
     if let Some(matches) = matches.subcommand_matches("model") {
-        match matches.value_of("model") {
-            None => {
-                let curr_model = get_model_name(&repository, REPO_CONFIG_FILE)?;
-                match curr_model {
-                    None => print!("No branching model set"),
-                    Some(model) => print!("{}", model),
-                }
+        match repository {
+            Ok(repository) => {
+                match matches.value_of("model") {
+                    None => {
+                        let curr_model = get_model_name(&repository, REPO_CONFIG_FILE)?;
+                        match curr_model {
+                            None => print!("No branching model set"),
+                            Some(model) => print!("{}", model),
+                        }
+                    }
+                    Some(model) => set_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?,
+                };
+                return Ok(());
             }
-            Some(model) => set_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?,
-        };
-        return Ok(());
+            Err(err) => return Err(format!("ERROR: {}\n       Navigate into a repository before running git-graph, or use option --path", err.message())),
+        }
     }
 
     let commit_limit = match matches.value_of("max-count") {
@@ -248,12 +255,14 @@ fn from_args() -> Result<(), String> {
         .map(|s| Characters::from_str(s))
         .unwrap_or_else(|| Ok(Characters::round()))?;
 
-    let model = get_model(
+    let model = matches.value_of("model");
+
+    /*get_model(
         &repository,
         matches.value_of("model"),
         REPO_CONFIG_FILE,
         &models_dir,
-    )?;
+    )?;*/
 
     let format = match matches.value_of("format") {
         None => CommitFormat::OneLine,
@@ -292,18 +301,19 @@ fn from_args() -> Result<(), String> {
         wrapping: None,
         characters: style,
         branch_order: BranchOrder::ShortestFirst(true),
-        branches: BranchSettings::from(model).map_err(|err| err.to_string())?,
+        branches: BranchSettings::from(BranchSettingsDef::none()).map_err(|err| err.to_string())?,
         merge_patterns: MergePatterns::default(),
     };
 
-    run(repository, settings, commit_limit).map_err(|err| err.to_string())?;
+    run(repository.ok(), settings, model, commit_limit).map_err(|err| err.to_string())?;
 
     Ok(())
 }
 
 fn run(
-    repository: Repository,
-    settings: Settings,
+    repository: Option<Repository>,
+    mut settings: Settings,
+    model: Option<&str>,
     max_commits: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
@@ -319,7 +329,14 @@ fn run(
     let tick_rate = Duration::from_millis(TICK_RATE);
     let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
 
-    let mut app = {
+    let mut app = if let Some(repository) = repository {
+        let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
+        let mut models_dir = app_dir;
+        models_dir.push("models");
+
+        let the_model = get_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?;
+        settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
+
         let graph = GitGraph::new(repository, &settings, max_commits)?;
         let branches = get_branches(&graph)?;
         let (lines, indices) = print_unicode(&graph, &settings)?;
@@ -328,6 +345,8 @@ fn run(
             .with_graph(graph, lines, indices)
             .with_branches(branches)
             .with_color(settings.colored)
+    } else {
+        App::new("git-igitt", true).with_color(settings.colored)
     };
 
     std::thread::spawn(move || {
