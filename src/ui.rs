@@ -4,7 +4,7 @@ use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
-use tui::style::{Color, Style};
+use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
 use tui::widgets::{Block, BorderType, Borders, Paragraph};
 use tui::Frame;
@@ -63,7 +63,11 @@ fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
         block = block.border_type(BorderType::Thick);
     }
 
-    let graph = GraphView::default().block(block).highlight_symbol(">", "#");
+    let mut graph = GraphView::default().block(block).highlight_symbol(">", "#");
+
+    if app.color {
+        graph = graph.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    }
 
     f.render_stateful_widget(graph, target, &mut app.graph_state);
 }
@@ -84,6 +88,7 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if app.active_view == ActiveView::Files {
         block = block.border_type(BorderType::Thick);
     }
+
     let color = app.color;
     if let Some(state) = &mut app.commit_state.content {
         let items: Vec<_> = state
@@ -101,7 +106,13 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                 })
             })
             .collect();
-        let list = FileList::new(items).block(block).highlight_symbol("> ");
+
+        let mut list = FileList::new(items).block(block).highlight_symbol("> ");
+
+        if color {
+            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        }
+
         f.render_stateful_widget(list, target, &mut state.diffs.state);
     } else {
         f.render_widget(block, target);
