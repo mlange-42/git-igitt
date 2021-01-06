@@ -3,6 +3,7 @@ use crate::dialogs::FileDialog;
 use crate::widgets::commit_view::CommitView;
 use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
+use crate::widgets::models_view::ModelListState;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
@@ -54,13 +55,26 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
         return;
     }
 
+    if let (ActiveView::Models, Some(model_state)) = (&app.active_view, &mut app.models_state) {
+        let chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([Constraint::Length(1), Constraint::Min(0)].as_ref())
+            .split(f.size());
+
+        let help = Paragraph::new("  Enter = confirm, P = permanent, Esc = abort.");
+        f.render_widget(help, chunks[0]);
+
+        draw_models(f, chunks[1], app.color, model_state);
+        return;
+    }
+
     if app.is_fullscreen {
         match app.active_view {
             ActiveView::Graph => draw_graph(f, f.size(), app),
             ActiveView::Commit => draw_commit(f, f.size(), app),
             ActiveView::Files => draw_files(f, f.size(), app),
             ActiveView::Diff => draw_diff(f, f.size(), app),
-            ActiveView::Help(_) => {}
+            _ => {}
         }
     } else {
         let base_split = if app.horizontal_split {
@@ -223,6 +237,27 @@ fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Te
     }
 }
 
+fn draw_models<B: Backend>(
+    f: &mut Frame<B>,
+    target: Rect,
+    color: bool,
+    state: &mut ModelListState,
+) {
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Branching model ");
+
+    let items: Vec<_> = state.models.iter().map(|m| ListItem::new(&m[..])).collect();
+
+    let mut list = List::new(items).block(block).highlight_symbol("> ");
+
+    if color {
+        list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    }
+
+    f.render_stateful_widget(list, target, &mut state.state);
+}
+
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let block = Block::default().borders(Borders::ALL).title(" Help ");
 
@@ -230,6 +265,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
         "F1/H             Show this help\n\
          Q                Quit\n\
          Ctrl + O         Open repository\n\
+         M                Set branching model\n\
          \n\
          Up/Down          Select / navigate / scroll\n\
          Shift + Up/Down  Navigate fast\n\

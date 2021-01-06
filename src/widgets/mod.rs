@@ -4,3 +4,4 @@ pub mod diff_view;
 pub mod files_view;
 pub mod format;
 pub mod graph_view;
+pub mod models_view;

@@ -2,11 +2,14 @@ use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
 use crate::widgets::files_view::StatefulList;
 use crate::widgets::graph_view::GraphViewState;
+use crate::widgets::models_view::ModelListState;
 use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, Oid};
+use git_graph::config::get_available_models;
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
 use std::fmt::{Error, Write};
+use std::path::PathBuf;
 use std::str::FromStr;
 use tui::style::Color;
 
@@ -18,6 +21,7 @@ pub enum ActiveView {
     Commit,
     Files,
     Diff,
+    Models,
     Help(u16),
 }
 
@@ -72,6 +76,7 @@ pub struct App<'a> {
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
     pub diff_state: DiffViewState,
+    pub models_state: Option<ModelListState>,
     pub title: &'a str,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
@@ -80,14 +85,16 @@ pub struct App<'a> {
     pub horizontal_split: bool,
     pub color: bool,
     pub should_quit: bool,
+    pub models_path: PathBuf,
 }
 
 impl<'a> App<'a> {
-    pub fn new(title: &'a str) -> App<'a> {
+    pub fn new(title: &'a str, models_path: PathBuf) -> App<'a> {
         App {
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
             diff_state: DiffViewState::default(),
+            models_state: None,
             title,
             active_view: ActiveView::Graph,
             prev_active_view: None,
@@ -96,6 +103,7 @@ impl<'a> App<'a> {
             horizontal_split: true,
             color: true,
             should_quit: false,
+            models_path,
         }
     }
 
@@ -188,6 +196,11 @@ impl<'a> App<'a> {
                     content.scroll = content.scroll.saturating_sub(step);
                 }
             }
+            ActiveView::Models => {
+                if let Some(state) = &mut self.models_state {
+                    state.previous()
+                }
+            }
         }
         Ok(())
     }
@@ -224,6 +237,11 @@ impl<'a> App<'a> {
                     content.scroll = content.scroll.saturating_add(step);
                 }
             }
+            ActiveView::Models => {
+                if let Some(state) = &mut self.models_state {
+                    state.next()
+                }
+            }
         }
         Ok(())
     }
@@ -254,6 +272,7 @@ impl<'a> App<'a> {
             ActiveView::Files => ActiveView::Diff,
             ActiveView::Diff => ActiveView::Diff,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+            ActiveView::Models => ActiveView::Models,
         }
     }
     pub fn on_left(&mut self) {
@@ -263,14 +282,22 @@ impl<'a> App<'a> {
             ActiveView::Files => ActiveView::Commit,
             ActiveView::Diff => ActiveView::Files,
             ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+            ActiveView::Models => ActiveView::Models,
         }
     }
 
     pub fn on_enter(&mut self) -> Result<(), String> {
-        if self.graph_state.secondary_selected.is_some() {
-            self.graph_state.secondary_selected = None;
-            self.graph_state.secondary_changed = false;
-            self.selection_changed()?;
+        match &self.active_view {
+            ActiveView::Help(_) => {
+                self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph)
+            }
+            _ => {
+                if self.graph_state.secondary_selected.is_some() {
+                    self.graph_state.secondary_selected = None;
+                    self.graph_state.secondary_changed = false;
+                    self.selection_changed()?;
+                }
+            }
         }
         Ok(())
     }
@@ -281,6 +308,8 @@ impl<'a> App<'a> {
 
     pub fn on_esc(&mut self) {
         if let ActiveView::Help(_) = self.active_view {
+            self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
+        } else if let ActiveView::Models = self.active_view {
             self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
         } else {
             self.active_view = ActiveView::Graph;
@@ -299,6 +328,19 @@ impl<'a> App<'a> {
             std::mem::swap(&mut temp, &mut self.active_view);
             self.prev_active_view = Some(temp);
         }
+    }
+
+    pub fn select_model(&mut self) -> Result<(), String> {
+        if let ActiveView::Models = self.active_view {
+        } else {
+            let mut temp = ActiveView::Models;
+            std::mem::swap(&mut temp, &mut self.active_view);
+            self.prev_active_view = Some(temp);
+
+            let models = get_available_models(&self.models_path)?;
+            self.models_state = Some(ModelListState::new(models, self.color));
+        }
+        Ok(())
     }
 
     fn selection_changed(&mut self) -> Result<(), String> {

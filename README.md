@@ -19,7 +19,7 @@ Decide for yourself which graph is the most comprehensible. :sunglasses:
 ## Features
 
 * View structured graphs directly in the terminal
-- Interactively browse the Git history and view commits and diffs
+* Interactively browse the Git history and view commits and diffs
 * Pre-defined and custom branching models and coloring
 
 ## Installation
@@ -54,7 +54,7 @@ git-igitt
 > C:/path/to/git-igitt/git-igitt
 > ```
 
-If the git-igitt is started inside a Git repository's folder, this repository will be displayed. Otherwise, a file dialog will appear that let's you select a repository.
+If git-igitt is started inside a Git repository's folder, this repository will be displayed. Otherwise, a file dialog will appear that let's you select a repository.
 
 **Branching models**
 

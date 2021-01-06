@@ -219,6 +219,7 @@ dependencies = [
  "muncher",
  "platform-dirs",
  "textwrap 0.13.2",
+ "toml",
  "tui",
  "unicode-width",
  "yansi",

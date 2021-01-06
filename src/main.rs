@@ -6,23 +6,22 @@ use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use git2::Repository;
-use git_graph::config::{
-    create_config, get_available_models, get_model, get_model_name, set_model,
-};
+use git_graph::config::{create_config, get_available_models, get_model, get_model_name};
 use git_graph::get_repo;
 use git_graph::graph::GitGraph;
 use git_graph::print::format::CommitFormat;
 use git_graph::print::unicode::print_unicode;
 use git_graph::settings::{
-    BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, Settings,
+    BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, RepoSettings,
+    Settings,
 };
-use git_igitt::app::{App, CurrentBranches};
+use git_igitt::app::{ActiveView, App, CurrentBranches};
 use git_igitt::dialogs::FileDialog;
 use git_igitt::ui;
 use platform_dirs::AppDirs;
 use std::error::Error;
 use std::io::stdout;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::{Duration, Instant};
 use tui::{backend::CrosstermBackend, Terminal};
@@ -382,6 +381,9 @@ fn run(
                     KeyCode::Char('h') | KeyCode::F(1) => {
                         app.show_help();
                     }
+                    KeyCode::Char('m') => {
+                        app.select_model()?;
+                    }
                     KeyCode::Char('r') => {
                         app = app.reload(&settings, max_commits)?;
                     }
@@ -401,6 +403,14 @@ fn run(
                         open_file = true;
                     }
 
+                    KeyCode::Char('p') => {
+                        if app.active_view == ActiveView::Models {
+                            let (a, s) = set_app_model(app, settings, max_commits, true)?;
+                            app = a;
+                            settings = s;
+                        }
+                    }
+
                     KeyCode::Up => app.on_up(
                         event.modifiers.contains(KeyModifiers::SHIFT),
                         event.modifiers.contains(KeyModifiers::CONTROL),
@@ -415,7 +425,15 @@ fn run(
                     KeyCode::Right => app.on_right(),
                     KeyCode::Tab => app.on_tab(),
                     KeyCode::Esc => app.on_esc(),
-                    KeyCode::Enter => app.on_enter()?,
+                    KeyCode::Enter => {
+                        if app.active_view == ActiveView::Models {
+                            let (a, s) = set_app_model(app, settings, max_commits, false)?;
+                            app = a;
+                            settings = s;
+                        } else {
+                            app.on_enter()?
+                        }
+                    }
                     _ => {}
                 },
                 Event::Update => {
@@ -438,20 +456,40 @@ fn run(
             terminal.draw(|f| ui::draw_open_repo(f, &mut file_dialog))?;
 
             let mut app = None;
-            match rx.recv()? {
-                Event::Input(event) => {
-                    match event.code {
-                        KeyCode::Char('q') => {
-                            disable_raw_mode()?;
-                            execute!(
-                                terminal.backend_mut(),
-                                LeaveAlternateScreen,
-                                DisableMouseCapture
-                            )?;
-                            terminal.show_cursor()?;
-                            break;
+            if let Event::Input(event) = rx.recv()? {
+                match event.code {
+                    KeyCode::Char('q') => {
+                        disable_raw_mode()?;
+                        execute!(
+                            terminal.backend_mut(),
+                            LeaveAlternateScreen,
+                            DisableMouseCapture
+                        )?;
+                        terminal.show_cursor()?;
+                        break;
+                    }
+                    KeyCode::Esc => {
+                        if let Some(path) = &file_dialog.selection {
+                            match get_repo(path) {
+                                Ok(repo) => {
+                                    app = Some(create_app(repo, &mut settings, model, max_commits)?)
+                                }
+                                Err(_) => {
+                                    file_dialog.error_message =
+                                        Some(format!("Not a Git repository: {}", path.display()));
+                                }
+                            };
                         }
-                        KeyCode::Esc => {
+                    }
+                    KeyCode::Up => file_dialog.on_up(),
+                    KeyCode::Down => file_dialog.on_down(),
+                    KeyCode::Left => file_dialog.on_left()?,
+                    KeyCode::Right => file_dialog.on_right()?,
+                    KeyCode::Enter => {
+                        if file_dialog.error_message.is_some() {
+                            file_dialog.dismiss_error();
+                        } else {
+                            file_dialog.on_enter();
                             if let Some(path) = &file_dialog.selection {
                                 match get_repo(path) {
                                     Ok(repo) => {
@@ -471,43 +509,78 @@ fn run(
                                 };
                             }
                         }
-                        KeyCode::Up => file_dialog.on_up(),
-                        KeyCode::Down => file_dialog.on_down(),
-                        KeyCode::Left => file_dialog.on_left()?,
-                        KeyCode::Right => file_dialog.on_right()?,
-                        KeyCode::Enter => {
-                            if file_dialog.error_message.is_some() {
-                                file_dialog.dismiss_error();
-                            } else {
-                                file_dialog.on_enter();
-                                if let Some(path) = &file_dialog.selection {
-                                    match get_repo(path) {
-                                        Ok(repo) => {
-                                            app = Some(create_app(
-                                                repo,
-                                                &mut settings,
-                                                model,
-                                                max_commits,
-                                            )?)
-                                        }
-                                        Err(_) => {
-                                            file_dialog.error_message = Some(format!(
-                                                "Not a Git repository: {}",
-                                                path.display()
-                                            ));
-                                        }
-                                    };
-                                }
-                            }
-                        }
-                        _ => {}
-                    };
-                }
-                _ => {}
+                    }
+                    _ => {}
+                };
             }
             app
         }
     }
+
+    Ok(())
+}
+
+fn set_app_model(
+    mut app: App,
+    mut settings: Settings,
+    max_commits: Option<usize>,
+    permanent: bool,
+) -> Result<(App, Settings), String> {
+    if let (Some(state), Some(graph)) = (&app.models_state, &app.graph_state.graph) {
+        if let Some(sel) = state.state.selected() {
+            let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
+            let mut models_dir = app_dir;
+            models_dir.push("models");
+
+            let model = &state.models[sel];
+
+            let the_model = get_model(
+                &graph.repository,
+                Some(model),
+                REPO_CONFIG_FILE,
+                &models_dir,
+            )?;
+
+            if permanent {
+                set_model(&graph.repository, model, REPO_CONFIG_FILE, &models_dir)?;
+            }
+
+            app.on_esc();
+
+            settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
+            app = app.reload(&settings, max_commits)?;
+        }
+    }
+    Ok((app, settings))
+}
+
+/// Permanently sets the branching model for a repository
+pub fn set_model<P: AsRef<Path>>(
+    repository: &Repository,
+    model: &str,
+    repo_config_file: &str,
+    app_model_path: &P,
+) -> Result<(), String> {
+    let models = get_available_models(&app_model_path)?;
+
+    if !models.contains(&model.to_string()) {
+        return Err(format!(
+            "ERROR: No branching model named '{}' found in {}\n       Available models are: {}",
+            model,
+            app_model_path.as_ref().display(),
+            itertools::join(models, ", ")
+        ));
+    }
+
+    let mut config_path = PathBuf::from(repository.path());
+    config_path.push(repo_config_file);
+
+    let config = RepoSettings {
+        model: model.to_string(),
+    };
+
+    let str = toml::to_string_pretty(&config).map_err(|err| err.to_string())?;
+    std::fs::write(&config_path, str).map_err(|err| err.to_string())?;
 
     Ok(())
 }
@@ -529,7 +602,7 @@ fn create_app<'a>(
     let branches = get_branches(&graph)?;
     let (lines, indices) = print_unicode(&graph, &settings)?;
 
-    Ok(App::new("git-igitt")
+    Ok(App::new("git-igitt", models_dir)
         .with_graph(graph, lines, indices)
         .with_branches(branches)
         .with_color(settings.colored))

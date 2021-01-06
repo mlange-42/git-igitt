@@ -25,5 +25,6 @@ itertools = "0.10"
 clap = {version = "2.33", optional = false}
 platform-dirs = "0.3"
 yansi = "0.5"
+toml = "0.5"
 textwrap = {version = "0.13", default-features = false, optional = false, features = ["unicode-width"]}
 git-graph = { git = "https://github.com/mlange-42/git-graph", tag = "0.2.0" }

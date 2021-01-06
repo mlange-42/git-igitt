@@ -102,7 +102,7 @@ impl<'a> FileDialog<'a> {
                         path.path()
                             .components()
                             .last()
-                            .and_then(|c| c.as_os_str().to_str().and_then(|s| Some(s.to_string())))
+                            .and_then(|c| c.as_os_str().to_str().map(|s| s.to_string()))
                     } else {
                         None
                     }
