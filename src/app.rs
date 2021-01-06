@@ -72,12 +72,13 @@ impl DiffType {
 
 pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 
-pub struct App<'a> {
+pub struct App {
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
     pub diff_state: DiffViewState,
     pub models_state: Option<ModelListState>,
-    pub title: &'a str,
+    pub title: String,
+    pub repo_name: String,
     pub active_view: ActiveView,
     pub prev_active_view: Option<ActiveView>,
     pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
@@ -88,14 +89,15 @@ pub struct App<'a> {
     pub models_path: PathBuf,
 }
 
-impl<'a> App<'a> {
-    pub fn new(title: &'a str, models_path: PathBuf) -> App<'a> {
+impl App {
+    pub fn new(title: String, repo_name: String, models_path: PathBuf) -> App {
         App {
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
             diff_state: DiffViewState::default(),
             models_state: None,
             title,
+            repo_name,
             active_view: ActiveView::Graph,
             prev_active_view: None,
             curr_branches: vec![],
@@ -107,29 +109,24 @@ impl<'a> App<'a> {
         }
     }
 
-    pub fn with_graph(
-        mut self,
-        graph: GitGraph,
-        text: Vec<String>,
-        indices: Vec<usize>,
-    ) -> App<'a> {
+    pub fn with_graph(mut self, graph: GitGraph, text: Vec<String>, indices: Vec<usize>) -> App {
         self.graph_state.graph = Some(graph);
         self.graph_state.text = text;
         self.graph_state.indices = indices;
         self
     }
 
-    pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App<'a> {
+    pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App {
         self.curr_branches = branches;
         self
     }
 
-    pub fn with_color(mut self, color: bool) -> App<'a> {
+    pub fn with_color(mut self, color: bool) -> App {
         self.color = color;
         self
     }
 
-    pub fn clear_graph(mut self) -> App<'a> {
+    pub fn clear_graph(mut self) -> App {
         self.graph_state.graph = None;
         self.graph_state.text = vec![];
         self.graph_state.indices = vec![];
@@ -140,7 +137,7 @@ impl<'a> App<'a> {
         mut self,
         settings: &Settings,
         max_commits: Option<usize>,
-    ) -> Result<App<'a>, String> {
+    ) -> Result<App, String> {
         let selected = self.graph_state.selected;
         let mut temp = None;
         std::mem::swap(&mut temp, &mut self.graph_state.graph);

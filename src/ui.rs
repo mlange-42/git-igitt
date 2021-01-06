@@ -109,7 +109,9 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 }
 
 fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title(" Graph ");
+    let mut block = Block::default()
+        .borders(Borders::ALL)
+        .title(format!(" Graph - {} ", app.repo_name));
     if app.active_view == ActiveView::Graph {
         block = block.border_type(BorderType::Thick);
     }

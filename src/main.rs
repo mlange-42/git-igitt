@@ -585,12 +585,12 @@ pub fn set_model<P: AsRef<Path>>(
     Ok(())
 }
 
-fn create_app<'a>(
+fn create_app(
     repository: Repository,
     settings: &mut Settings,
     model: Option<&str>,
     max_commits: Option<usize>,
-) -> Result<App<'a>, String> {
+) -> Result<App, String> {
     let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
     let mut models_dir = app_dir;
     models_dir.push("models");
@@ -598,14 +598,23 @@ fn create_app<'a>(
     let the_model = get_model(&repository, model, REPO_CONFIG_FILE, &models_dir)?;
     settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
 
+    let name = &repository
+        .path()
+        .parent()
+        .and_then(|p| p.components().last().and_then(|c| c.as_os_str().to_str()))
+        .unwrap_or("unknown")
+        .to_string();
+
     let graph = GitGraph::new(repository, &settings, max_commits)?;
     let branches = get_branches(&graph)?;
     let (lines, indices) = print_unicode(&graph, &settings)?;
 
-    Ok(App::new("git-igitt", models_dir)
-        .with_graph(graph, lines, indices)
-        .with_branches(branches)
-        .with_color(settings.colored))
+    Ok(
+        App::new(format!("git-igitt - {}", name), name.clone(), models_dir)
+            .with_graph(graph, lines, indices)
+            .with_branches(branches)
+            .with_color(settings.colored),
+    )
 }
 
 fn has_changed(app: &mut App) -> Result<bool, String> {
