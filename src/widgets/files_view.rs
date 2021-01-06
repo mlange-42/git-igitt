@@ -228,7 +228,6 @@ impl<'a> StatefulWidget for FileList<'a> {
             .collect::<String>();
 
         let mut current_height = 0;
-        let has_selection = state.selected.is_some();
         for (i, item) in self
             .items
             .iter_mut()
@@ -257,15 +256,13 @@ impl<'a> StatefulWidget for FileList<'a> {
             buf.set_style(area, item_style);
 
             let is_selected = state.selected.map(|s| s == i).unwrap_or(false);
-            let elem_x = if has_selection {
+            let elem_x = {
                 let symbol = if is_selected {
                     highlight_symbol
                 } else {
                     &blank_symbol
                 };
                 let (x, _) = buf.set_stringn(x, y, symbol, list_area.width as usize, item_style);
-                x
-            } else {
                 x
             };
             let max_element_width = (list_area.width - (elem_x - x)) as usize;

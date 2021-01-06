@@ -56,9 +56,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 }
 
 fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default()
-        .borders(Borders::ALL)
-        .title("Graph - H for help");
+    let mut block = Block::default().borders(Borders::ALL).title(" Graph ");
     if app.active_view == ActiveView::Graph {
         block = block.border_type(BorderType::Thick);
     }
@@ -73,7 +71,7 @@ fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 }
 
 fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Commit");
+    let mut block = Block::default().borders(Borders::ALL).title(" Commit ");
     if app.active_view == ActiveView::Commit {
         block = block.border_type(BorderType::Thick);
     }
@@ -84,13 +82,17 @@ fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 }
 
 fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Files");
-    if app.active_view == ActiveView::Files {
-        block = block.border_type(BorderType::Thick);
-    }
-
     let color = app.color;
     if let Some(state) = &mut app.commit_state.content {
+        let mut block = Block::default().borders(Borders::ALL).title(format!(
+            " Files ({}..{}) ",
+            &state.compare_oid.to_string()[..7],
+            &state.oid.to_string()[..7]
+        ));
+        if app.active_view == ActiveView::Files {
+            block = block.border_type(BorderType::Thick);
+        }
+
         let items: Vec<_> = state
             .diffs
             .items
@@ -115,24 +117,33 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_stateful_widget(list, target, &mut state.diffs.state);
     } else {
+        let mut block = Block::default().borders(Borders::ALL).title("Files");
+        if app.active_view == ActiveView::Files {
+            block = block.border_type(BorderType::Thick);
+        }
         f.render_widget(block, target);
     }
 }
 
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title("Diff");
-    if app.active_view == ActiveView::Diff {
-        block = block.border_type(BorderType::Thick);
-    }
-    let styles = [
-        Style::default().fg(Color::LightGreen),
-        Style::default().fg(Color::LightRed),
-        Style::default().fg(Color::LightBlue),
-        Style::default(),
-    ];
     if let Some(state) = &app.diff_state.content {
+        let mut block = Block::default().borders(Borders::ALL).title(format!(
+            " Diff ({}..{}) ",
+            &state.compare_oid.to_string()[..7],
+            &state.oid.to_string()[..7]
+        ));
+        if app.active_view == ActiveView::Diff {
+            block = block.border_type(BorderType::Thick);
+        }
+
         let scroll = state.scroll;
 
+        let styles = [
+            Style::default().fg(Color::LightGreen),
+            Style::default().fg(Color::LightRed),
+            Style::default().fg(Color::LightBlue),
+            Style::default(),
+        ];
         let mut text = Text::from("");
         for line in &state.diffs {
             if let Some(pos) = line.find(" @@ ") {
@@ -148,6 +159,10 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_widget(paragraph, target);
     } else {
+        let mut block = Block::default().borders(Borders::ALL).title(" Diff ");
+        if app.active_view == ActiveView::Diff {
+            block = block.border_type(BorderType::Thick);
+        }
         f.render_widget(block, target);
     }
 }
@@ -170,7 +185,7 @@ fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Te
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
-    let block = Block::default().borders(Borders::ALL).title("Help");
+    let block = Block::default().borders(Borders::ALL).title(" Help ");
 
     let paragraph = Paragraph::new(
         "Q                Quit\n\

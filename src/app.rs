@@ -370,21 +370,22 @@ impl<'a> App<'a> {
                             diffs.push((
                                 f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
                                 tp,
-                                d.old_file().id(),
-                                d.new_file().id(),
                             ));
                             true
                         })
                         .map_err(|err| err.message().to_string())?;
 
                         diff_err?;
-                    }
 
-                    self.commit_state.content = Some(CommitViewInfo::new(
-                        message_fmt,
-                        StatefulList::with_items(diffs),
-                        info.oid,
-                    ));
+                        self.commit_state.content = Some(CommitViewInfo::new(
+                            message_fmt,
+                            StatefulList::with_items(diffs),
+                            info.oid,
+                            parent.id(),
+                        ));
+                    } else {
+                        self.commit_state.content = None;
+                    }
                 } else {
                     self.commit_state.content = None;
                 }
@@ -467,7 +468,8 @@ impl<'a> App<'a> {
                                 .map_err(|err| err.message().to_string())?;
                                 diff_error?;
 
-                                self.diff_state.content = Some(DiffViewInfo::new(diffs));
+                                self.diff_state.content =
+                                    Some(DiffViewInfo::new(diffs, info.oid, parent.id()));
                             }
                         }
                     }
