@@ -388,7 +388,11 @@ fn run(
                         app = app.reload(&settings, max_commits)?;
                     }
                     KeyCode::Char('l') => {
-                        app.toggle_layout();
+                        if event.modifiers.contains(KeyModifiers::CONTROL) {
+                            app.toggle_line_numbers()?;
+                        } else {
+                            app.toggle_layout();
+                        }
                     }
                     KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                         if let Some(graph) = &app.graph_state.graph {
