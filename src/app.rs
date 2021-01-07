@@ -162,9 +162,9 @@ impl App {
     }
 
     pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+        let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
-                let step = if is_shift { 10 } else { 1 };
                 if is_ctrl {
                     if self.graph_state.move_secondary_selection(step, false) {
                         self.selection_changed()?;
@@ -174,28 +174,27 @@ impl App {
                 }
             }
             ActiveView::Help(scroll) => {
-                self.active_view = ActiveView::Help(scroll.saturating_sub(1))
+                self.active_view = ActiveView::Help(scroll.saturating_sub(step as u16))
             }
             ActiveView::Commit => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.scroll = content.scroll.saturating_sub(1);
+                    content.scroll = content.scroll.saturating_sub(step as u16);
                 }
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.previous();
+                    content.diffs.bwd(step);
                     self.file_changed()?;
                 }
             }
             ActiveView::Diff => {
                 if let Some(content) = &mut self.diff_state.content {
-                    let step = if is_shift { 10 } else { 1 };
-                    content.scroll = content.scroll.saturating_sub(step);
+                    content.scroll = content.scroll.saturating_sub(step as u16);
                 }
             }
             ActiveView::Models => {
                 if let Some(state) = &mut self.models_state {
-                    state.previous()
+                    state.bwd(step)
                 }
             }
         }
@@ -203,9 +202,9 @@ impl App {
     }
 
     pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+        let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
-                let step = if is_shift { 10 } else { 1 };
                 if is_ctrl {
                     if self.graph_state.move_secondary_selection(step, true) {
                         self.selection_changed()?;
@@ -215,28 +214,27 @@ impl App {
                 }
             }
             ActiveView::Help(scroll) => {
-                self.active_view = ActiveView::Help(scroll.saturating_add(1))
+                self.active_view = ActiveView::Help(scroll.saturating_add(step as u16))
             }
             ActiveView::Commit => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.scroll = content.scroll.saturating_add(1);
+                    content.scroll = content.scroll.saturating_add(step as u16);
                 }
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.next();
+                    content.diffs.fwd(step);
                     self.file_changed()?;
                 }
             }
             ActiveView::Diff => {
                 if let Some(content) = &mut self.diff_state.content {
-                    let step = if is_shift { 10 } else { 1 };
-                    content.scroll = content.scroll.saturating_add(step);
+                    content.scroll = content.scroll.saturating_add(step as u16);
                 }
             }
             ActiveView::Models => {
                 if let Some(state) = &mut self.models_state {
-                    state.next()
+                    state.fwd(step)
                 }
             }
         }

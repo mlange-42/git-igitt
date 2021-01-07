@@ -82,29 +82,17 @@ impl<T> StatefulList<T> {
         }
     }
 
-    pub fn next(&mut self) {
+    pub fn fwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.items.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => std::cmp::min(i.saturating_add(steps), self.items.len() - 1),
             None => 0,
         };
         self.state.select(Some(i));
     }
 
-    pub fn previous(&mut self) {
+    pub fn bwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.items.len() - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => i.saturating_sub(steps),
             None => 0,
         };
         self.state.select(Some(i));

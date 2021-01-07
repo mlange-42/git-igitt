@@ -25,29 +25,17 @@ impl<'a> FileDialog<'a> {
         })
     }
 
-    pub fn next(&mut self) {
+    pub fn fwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.dirs.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => std::cmp::min(i.saturating_add(steps), self.dirs.len() - 1),
             None => 0,
         };
         self.state.select(Some(i));
     }
 
-    pub fn previous(&mut self) {
+    pub fn bwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.dirs.len() - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => i.saturating_sub(steps),
             None => 0,
         };
         self.state.select(Some(i));
@@ -57,12 +45,14 @@ impl<'a> FileDialog<'a> {
         self.error_message = None;
     }
 
-    pub fn on_up(&mut self) {
-        self.previous()
+    pub fn on_up(&mut self, is_shift: bool) {
+        let step = if is_shift { 10 } else { 1 };
+        self.bwd(step)
     }
 
-    pub fn on_down(&mut self) {
-        self.next()
+    pub fn on_down(&mut self, is_shift: bool) {
+        let step = if is_shift { 10 } else { 1 };
+        self.fwd(step)
     }
 
     pub fn on_left(&mut self) -> Result<(), String> {

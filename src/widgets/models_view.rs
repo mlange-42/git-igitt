@@ -15,38 +15,19 @@ impl ModelListState {
         }
     }
 
-    pub fn next(&mut self) {
+    pub fn fwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i >= self.models.len() - 1 {
-                    0
-                } else {
-                    i + 1
-                }
-            }
+            Some(i) => std::cmp::min(i.saturating_add(steps), self.models.len() - 1),
             None => 0,
         };
         self.state.select(Some(i));
     }
 
-    pub fn previous(&mut self) {
+    pub fn bwd(&mut self, steps: usize) {
         let i = match self.state.selected() {
-            Some(i) => {
-                if i == 0 {
-                    self.models.len() - 1
-                } else {
-                    i - 1
-                }
-            }
+            Some(i) => i.saturating_sub(steps),
             None => 0,
         };
         self.state.select(Some(i));
-    }
-    pub fn on_up(&mut self) {
-        self.previous()
-    }
-
-    pub fn on_down(&mut self) {
-        self.next()
     }
 }
