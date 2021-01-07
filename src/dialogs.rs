@@ -57,8 +57,9 @@ impl<'a> FileDialog<'a> {
 
     pub fn on_left(&mut self) -> Result<(), String> {
         if let Some(par) = self.location.parent() {
+            let prev = self.location.clone();
             self.location = PathBuf::from(par);
-            self.selection_changed()?;
+            self.selection_changed(Some(prev))?;
         }
         Ok(())
     }
@@ -69,7 +70,7 @@ impl<'a> FileDialog<'a> {
             let mut path = PathBuf::from(&self.location);
             path.push(file);
             self.location = path;
-            self.selection_changed()?;
+            self.selection_changed(None)?;
         }
         Ok(())
     }
@@ -83,7 +84,7 @@ impl<'a> FileDialog<'a> {
         }
     }
 
-    pub fn selection_changed(&mut self) -> Result<(), String> {
+    pub fn selection_changed(&mut self, prev_location: Option<PathBuf>) -> Result<(), String> {
         self.dirs = std::fs::read_dir(&self.location)
             .map_err(|err| err.to_string())?
             .filter_map(|path| match path {
@@ -102,6 +103,17 @@ impl<'a> FileDialog<'a> {
             .collect();
         if self.dirs.is_empty() {
             self.state.select(None);
+        } else if let Some(prev) = prev_location {
+            if let Some(prev_index) = prev
+                .components()
+                .last()
+                .and_then(|comp| comp.as_os_str().to_str())
+                .and_then(|dir| self.dirs.iter().position(|d| d == dir))
+            {
+                self.state.select(Some(prev_index));
+            } else {
+                self.state.select(Some(0));
+            }
         } else {
             self.state.select(Some(0));
         }
