@@ -342,91 +342,90 @@ impl App {
 
     fn selection_changed(&mut self) -> Result<(), String> {
         if let Some(graph) = &self.graph_state.graph {
-            self.commit_state.content = if let Some((info, idx)) = self
-                .graph_state
-                .selected
-                .and_then(move |sel_idx| graph.commits.get(sel_idx).map(|commit| (commit, sel_idx)))
-            {
-                let commit = graph
-                    .repository
-                    .find_commit(info.oid)
-                    .map_err(|err| err.message().to_string())?;
+            self.commit_state.content =
+                if let Some((info, idx)) = self.graph_state.selected.and_then(move |sel_idx| {
+                    graph.commits.get(sel_idx).map(|commit| (commit, sel_idx))
+                }) {
+                    let commit = graph
+                        .repository
+                        .find_commit(info.oid)
+                        .map_err(|err| err.message().to_string())?;
 
-                let head_idx = graph.indices.get(&graph.head.oid);
-                let head = if head_idx.map_or(false, |h| h == &idx) {
-                    Some(&graph.head)
-                } else {
-                    None
-                };
+                    let head_idx = graph.indices.get(&graph.head.oid);
+                    let head = if head_idx.map_or(false, |h| h == &idx) {
+                        Some(&graph.head)
+                    } else {
+                        None
+                    };
 
-                let hash_color = if self.color { Some(HASH_COLOR) } else { None };
-                let branches = format_branches(&graph, info, head, self.color)?;
-                let message_fmt = crate::widgets::format::format(&commit, branches, hash_color)?;
+                    let hash_color = if self.color { Some(HASH_COLOR) } else { None };
+                    let branches = format_branches(&graph, info, head, self.color)?;
+                    let message_fmt = crate::util::format::format(&commit, branches, hash_color)?;
 
-                let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
-                    let sec_selected_info = graph.commits.get(sel);
-                    if let Some(info) = sec_selected_info {
-                        Some(
-                            graph
-                                .repository
-                                .find_commit(info.oid)
-                                .map_err(|err| err.message().to_string())?,
-                        )
+                    let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
+                        let sec_selected_info = graph.commits.get(sel);
+                        if let Some(info) = sec_selected_info {
+                            Some(
+                                graph
+                                    .repository
+                                    .find_commit(info.oid)
+                                    .map_err(|err| err.message().to_string())?,
+                            )
+                        } else {
+                            commit.parent(0).ok()
+                        }
                     } else {
                         commit.parent(0).ok()
-                    }
-                } else {
-                    commit.parent(0).ok()
-                };
-                let comp_oid = compare_to.as_ref().map(|c| c.id());
+                    };
+                    let comp_oid = compare_to.as_ref().map(|c| c.id());
 
-                let mut diffs = vec![];
-                let diff = graph
-                    .repository
-                    .diff_tree_to_tree(
-                        compare_to
-                            .map(|c| c.tree())
-                            .map_or(Ok(None), |v| v.map(Some))
-                            .map_err(|err| err.message().to_string())?
-                            .as_ref(),
-                        Some(&commit.tree().map_err(|err| err.message().to_string())?),
-                        None,
-                    )
+                    let mut diffs = vec![];
+                    let diff = graph
+                        .repository
+                        .diff_tree_to_tree(
+                            compare_to
+                                .map(|c| c.tree())
+                                .map_or(Ok(None), |v| v.map(Some))
+                                .map_err(|err| err.message().to_string())?
+                                .as_ref(),
+                            Some(&commit.tree().map_err(|err| err.message().to_string())?),
+                            None,
+                        )
+                        .map_err(|err| err.message().to_string())?;
+
+                    let mut diff_err = Ok(());
+                    diff.print(DiffFormat::NameStatus, |d, _h, l| {
+                        let content = std::str::from_utf8(l.content()).unwrap();
+                        let tp = match DiffType::from_str(&content[..1]) {
+                            Ok(tp) => tp,
+                            Err(err) => {
+                                diff_err = Err(err);
+                                return false;
+                            }
+                        };
+                        let f = match tp {
+                            DiffType::Deleted | DiffType::Modified => d.old_file(),
+                            DiffType::Added | DiffType::Renamed => d.new_file(),
+                        };
+                        diffs.push((
+                            f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
+                            tp,
+                        ));
+                        true
+                    })
                     .map_err(|err| err.message().to_string())?;
 
-                let mut diff_err = Ok(());
-                diff.print(DiffFormat::NameStatus, |d, _h, l| {
-                    let content = std::str::from_utf8(l.content()).unwrap();
-                    let tp = match DiffType::from_str(&content[..1]) {
-                        Ok(tp) => tp,
-                        Err(err) => {
-                            diff_err = Err(err);
-                            return false;
-                        }
-                    };
-                    let f = match tp {
-                        DiffType::Deleted | DiffType::Modified => d.old_file(),
-                        DiffType::Added | DiffType::Renamed => d.new_file(),
-                    };
-                    diffs.push((
-                        f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
-                        tp,
-                    ));
-                    true
-                })
-                .map_err(|err| err.message().to_string())?;
+                    diff_err?;
 
-                diff_err?;
-
-                Some(CommitViewInfo::new(
-                    message_fmt,
-                    StatefulList::with_items(diffs),
-                    info.oid,
-                    comp_oid.unwrap_or_else(Oid::zero),
-                ))
-            } else {
-                None
-            }
+                    Some(CommitViewInfo::new(
+                        message_fmt,
+                        StatefulList::with_items(diffs),
+                        info.oid,
+                        comp_oid.unwrap_or_else(Oid::zero),
+                    ))
+                } else {
+                    None
+                }
         }
         self.file_changed()?;
         Ok(())

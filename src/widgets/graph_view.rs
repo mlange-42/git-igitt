@@ -1,4 +1,4 @@
-use crate::widgets::ctrl_chars::CtrlChars;
+use crate::util::ctrl_chars::CtrlChars;
 use git_graph::graph::GitGraph;
 use std::iter::{self, Iterator};
 use tui::buffer::Buffer;
