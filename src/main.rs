@@ -331,7 +331,7 @@ fn run(
 
     let mut file_dialog =
         FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
-    file_dialog.selection_changed()?;
+    file_dialog.selection_changed(None)?;
 
     std::thread::spawn(move || {
         let mut last_update = Instant::now();
@@ -451,7 +451,12 @@ fn run(
                 break;
             }
             if open_file {
-                file_dialog.selection_changed()?;
+                let prev = if let Some(graph) = app.graph_state.graph {
+                    graph.repository.path().parent().map(PathBuf::from)
+                } else {
+                    None
+                };
+                file_dialog.selection_changed(prev)?;
                 None
             } else {
                 Some(app)
