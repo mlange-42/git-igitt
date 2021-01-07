@@ -85,6 +85,7 @@ pub struct App {
     pub is_fullscreen: bool,
     pub horizontal_split: bool,
     pub color: bool,
+    pub line_numbers: bool,
     pub should_quit: bool,
     pub models_path: PathBuf,
 }
@@ -104,6 +105,7 @@ impl App {
             is_fullscreen: false,
             horizontal_split: true,
             color: true,
+            line_numbers: true,
             should_quit: false,
             models_path,
         }
@@ -314,6 +316,11 @@ impl App {
 
     pub fn toggle_layout(&mut self) {
         self.horizontal_split = !self.horizontal_split;
+    }
+
+    pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
+        self.line_numbers = !self.line_numbers;
+        self.file_changed()
     }
 
     pub fn show_help(&mut self) {

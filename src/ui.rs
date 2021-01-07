@@ -199,52 +199,67 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             Style::default().fg(Color::LightBlue),
             Style::default(),
         ];
-        let mut max_old_ln = None;
-        let mut max_new_ln = None;
-        for (_, old_ln, new_ln) in state.diffs.iter().rev() {
-            if max_old_ln.is_none() {
-                if let Some(old_ln) = old_ln {
-                    max_old_ln = Some(*old_ln);
+
+        let (space_old_ln, space_new_ln, empty_old_ln, empty_new_ln) = if app.line_numbers {
+            let mut max_old_ln = None;
+            let mut max_new_ln = None;
+
+            for (_, old_ln, new_ln) in state.diffs.iter().rev() {
+                if max_old_ln.is_none() {
+                    if let Some(old_ln) = old_ln {
+                        max_old_ln = Some(*old_ln);
+                    }
+                }
+                if max_new_ln.is_none() {
+                    if let Some(new_ln) = new_ln {
+                        max_new_ln = Some(*new_ln);
+                    }
+                }
+                if max_old_ln.is_some() && max_new_ln.is_some() {
+                    break;
                 }
             }
-            if max_new_ln.is_none() {
-                if let Some(new_ln) = new_ln {
-                    max_new_ln = Some(*new_ln);
-                }
-            }
-            if max_old_ln.is_some() && max_new_ln.is_some() {
-                break;
-            }
-        }
-        let space_old_ln =
-            std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().floor() as usize);
-        let space_new_ln =
-            std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().floor() as usize) + 1;
-        let empty_old_ln = " ".repeat(space_old_ln);
-        let empty_new_ln = " ".repeat(space_new_ln);
+
+            let space_old_ln =
+                std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().floor() as usize);
+            let space_new_ln =
+                std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().floor() as usize) + 1;
+
+            (
+                space_old_ln,
+                space_new_ln,
+                " ".repeat(space_old_ln),
+                " ".repeat(space_new_ln),
+            )
+        } else {
+            (0, 0, String::new(), String::new())
+        };
 
         let mut text = Text::from("");
         for (line, old_ln, new_ln) in &state.diffs {
             let ln = if line.starts_with("@@ ") {
                 if let Some(pos) = line.find(" @@ ") {
-                    let (l1, l2) = line.split_at(pos + 3);
-                    text.extend(style_diff_line(None, l1, &styles, app.color));
-                    l2
+                    &line[..pos + 3]
                 } else {
                     line
                 }
             } else {
                 line
             };
-            let l1 = old_ln
-                .map(|v| format!("{:>width$}", v, width = space_old_ln))
-                .unwrap_or_else(|| empty_old_ln.clone());
-            let l2 = new_ln
-                .map(|v| format!("{:>width$}", v, width = space_new_ln))
-                .unwrap_or_else(|| empty_new_ln.clone());
-            let fmt = format!("{}{}|", l1, l2);
 
-            text.extend(style_diff_line(Some(fmt), ln, &styles, app.color));
+            if app.line_numbers && (old_ln.is_some() || new_ln.is_some()) {
+                let l1 = old_ln
+                    .map(|v| format!("{:>width$}", v, width = space_old_ln))
+                    .unwrap_or_else(|| empty_old_ln.clone());
+                let l2 = new_ln
+                    .map(|v| format!("{:>width$}", v, width = space_new_ln))
+                    .unwrap_or_else(|| empty_new_ln.clone());
+                let fmt = format!("{}{}|", l1, l2);
+
+                text.extend(style_diff_line(Some(fmt), ln, &styles, app.color));
+            } else {
+                text.extend(style_diff_line(None, ln, &styles, app.color));
+            }
         }
 
         let paragraph = Paragraph::new(text).block(block).scroll((scroll, 0));
@@ -329,6 +344,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Tab              Panel to fullscreen\n\
          Ecs              Return to default view\n\
          L                Toggle horizontal/vertical layout\n\
+         Ctrl + L         Toggle line numbers in diff\n\
          \n\
          R                Reload repository graph",
     )
