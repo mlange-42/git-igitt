@@ -199,15 +199,52 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             Style::default().fg(Color::LightBlue),
             Style::default(),
         ];
-        let mut text = Text::from("");
-        for line in &state.diffs {
-            if let Some(pos) = line.find(" @@ ") {
-                let (l1, l2) = line.split_at(pos + 3);
-                text.extend(style_diff_line(l1, &styles, app.color));
-                text.extend(style_diff_line(l2, &styles, app.color));
-            } else {
-                text.extend(style_diff_line(line, &styles, app.color));
+        let mut max_old_ln = None;
+        let mut max_new_ln = None;
+        for (_, old_ln, new_ln) in state.diffs.iter().rev() {
+            if max_old_ln.is_none() {
+                if let Some(old_ln) = old_ln {
+                    max_old_ln = Some(*old_ln);
+                }
             }
+            if max_new_ln.is_none() {
+                if let Some(new_ln) = new_ln {
+                    max_new_ln = Some(*new_ln);
+                }
+            }
+            if max_old_ln.is_some() && max_new_ln.is_some() {
+                break;
+            }
+        }
+        let space_old_ln =
+            std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().floor() as usize);
+        let space_new_ln =
+            std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().floor() as usize) + 1;
+        let empty_old_ln = " ".repeat(space_old_ln);
+        let empty_new_ln = " ".repeat(space_new_ln);
+
+        let mut text = Text::from("");
+        for (line, old_ln, new_ln) in &state.diffs {
+            let ln = if line.starts_with("@@ ") {
+                if let Some(pos) = line.find(" @@ ") {
+                    let (l1, l2) = line.split_at(pos + 3);
+                    text.extend(style_diff_line(None, l1, &styles, app.color));
+                    l2
+                } else {
+                    line
+                }
+            } else {
+                line
+            };
+            let l1 = old_ln
+                .map(|v| format!("{:>width$}", v, width = space_old_ln))
+                .unwrap_or_else(|| empty_old_ln.clone());
+            let l2 = new_ln
+                .map(|v| format!("{:>width$}", v, width = space_new_ln))
+                .unwrap_or_else(|| empty_new_ln.clone());
+            let fmt = format!("{}{}|", l1, l2);
+
+            text.extend(style_diff_line(Some(fmt), ln, &styles, app.color));
         }
 
         let paragraph = Paragraph::new(text).block(block).scroll((scroll, 0));
@@ -222,9 +259,18 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     }
 }
 
-fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Text<'a> {
+fn style_diff_line<'a>(
+    prefix: Option<String>,
+    line: &'a str,
+    styles: &'a [Style; 4],
+    color: bool,
+) -> Text<'a> {
     if !color {
-        Text::raw(line)
+        if let Some(prefix) = prefix {
+            Text::raw(format!("{}{}", prefix, line))
+        } else {
+            Text::raw(line)
+        }
     } else {
         let style = if line.starts_with('+') {
             styles[0]
@@ -235,7 +281,11 @@ fn style_diff_line<'a>(line: &'a str, styles: &'a [Style; 4], color: bool) -> Te
         } else {
             styles[3]
         };
-        Text::styled(line, style)
+        if let Some(prefix) = prefix {
+            Text::styled(format!("{}{}", prefix, line), style)
+        } else {
+            Text::styled(line, style)
+        }
     }
 }
 

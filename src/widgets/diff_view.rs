@@ -11,13 +11,13 @@ impl Default for DiffViewState {
 }
 
 pub struct DiffViewInfo {
-    pub diffs: Vec<String>,
+    pub diffs: Vec<(String, Option<u32>, Option<u32>)>,
     pub oid: Oid,
     pub compare_oid: Oid,
     pub scroll: u16,
 }
 impl DiffViewInfo {
-    pub fn new(diffs: Vec<String>, oid: Oid, compare_oid: Oid) -> Self {
+    pub fn new(diffs: Vec<(String, Option<u32>, Option<u32>)>, oid: Oid, compare_oid: Oid) -> Self {
         Self {
             diffs,
             oid,

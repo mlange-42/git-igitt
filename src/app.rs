@@ -486,8 +486,8 @@ impl App {
                 let mut diffs = vec![];
 
                 diff.print(DiffFormat::Patch, |d, h, l| {
-                    match print_diff_line(d, h, l) {
-                        Ok(line) => diffs.push(line),
+                    match print_diff_line(&d, &h, &l) {
+                        Ok(line) => diffs.push((line, l.old_lineno(), l.new_lineno())),
                         Err(err) => {
                             diff_error = Err(err.to_string());
                             return false;
@@ -512,9 +512,9 @@ impl App {
 }
 
 fn print_diff_line(
-    _delta: DiffDelta,
-    _hunk: Option<DiffHunk>,
-    line: DiffLine,
+    _delta: &DiffDelta,
+    _hunk: &Option<DiffHunk>,
+    line: &DiffLine,
 ) -> Result<String, Error> {
     let mut out = String::new();
     match line.origin() {
