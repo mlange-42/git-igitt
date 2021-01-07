@@ -481,8 +481,10 @@ fn run(
                             };
                         }
                     }
-                    KeyCode::Up => file_dialog.on_up(),
-                    KeyCode::Down => file_dialog.on_down(),
+                    KeyCode::Up => file_dialog.on_up(event.modifiers.contains(KeyModifiers::SHIFT)),
+                    KeyCode::Down => {
+                        file_dialog.on_down(event.modifiers.contains(KeyModifiers::SHIFT))
+                    }
                     KeyCode::Left => file_dialog.on_left()?,
                     KeyCode::Right => file_dialog.on_right()?,
                     KeyCode::Enter => {
