@@ -1,5 +1,5 @@
 use crate::app::DiffType;
-use crate::widgets::ctrl_chars::CtrlChars;
+use crate::util::ctrl_chars::CtrlChars;
 use crate::widgets::files_view::StatefulList;
 use git2::Oid;
 use tui::buffer::Buffer;
@@ -153,78 +153,6 @@ impl<'a> StatefulWidget for CommitView<'a> {
                 }
             }
         }
-
-        /*
-        let list_height = list_area.height as usize;
-
-        let mut start = state.offset;
-
-        let height = std::cmp::min(
-            list_height as usize,
-            state.text.len().saturating_sub(state.offset),
-        );
-        let mut end = start + height;
-
-        let selected_row = state.selected.map(|idx| state.indices[idx]);
-        let selected = selected_row.unwrap_or(0).min(state.text.len() - 1);
-
-        if selected >= end {
-            let diff = selected + 1 - end;
-            end += diff;
-            start += diff;
-        }
-        if selected < start {
-            let diff = start - selected;
-            end -= diff;
-            start -= diff;
-        }
-        state.offset = start;
-
-        let highlight_symbol = self.highlight_symbol.unwrap_or("");
-        let blank_symbol = iter::repeat(" ")
-            .take(highlight_symbol.width())
-            .collect::<String>();
-
-        let style = Style::default();
-        for (current_height, (i, item)) in state
-            .text
-            .iter_mut()
-            .enumerate()
-            .skip(state.offset)
-            .take(end - start)
-            .enumerate()
-        {
-            let (x, y) = (list_area.left(), list_area.top() + current_height as u16);
-
-            let is_selected = selected_row.map(|s| s == i).unwrap_or(false);
-            let elem_x = {
-                let symbol = if is_selected {
-                    highlight_symbol
-                } else {
-                    &blank_symbol
-                };
-                let (x, _) = buf.set_stringn(x, y, symbol, list_area.width as usize, style);
-                x
-            };
-
-            let max_element_width = (list_area.width - (elem_x - x)) as usize;
-
-            let body = CtrlChars::parse(item).into_text();
-            let mut x = elem_x;
-            let mut remaining_width = max_element_width as u16;
-            for txt in body {
-                for line in txt.lines {
-                    if remaining_width == 0 {
-                        break;
-                    }
-                    let pos = buf.set_spans(x, y, &line, remaining_width);
-                    let w = pos.0.saturating_sub(x);
-                    x = pos.0;
-                    remaining_width = remaining_width.saturating_sub(w);
-                }
-            }
-        }
-         */
     }
 }
 

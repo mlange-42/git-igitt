@@ -342,10 +342,10 @@ impl App {
 
     fn selection_changed(&mut self) -> Result<(), String> {
         if let Some(graph) = &self.graph_state.graph {
-            let selected_index = self.graph_state.selected;
-            if let Some(idx) = selected_index {
-                let selected_info = graph.commits.get(idx);
-                if let Some(info) = selected_info {
+            self.commit_state.content =
+                if let Some((info, idx)) = self.graph_state.selected.and_then(move |sel_idx| {
+                    graph.commits.get(sel_idx).map(|commit| (commit, sel_idx))
+                }) {
                     let commit = graph
                         .repository
                         .find_commit(info.oid)
@@ -360,8 +360,7 @@ impl App {
 
                     let hash_color = if self.color { Some(HASH_COLOR) } else { None };
                     let branches = format_branches(&graph, info, head, self.color)?;
-                    let message_fmt =
-                        crate::widgets::format::format(&commit, branches, hash_color)?;
+                    let message_fmt = crate::util::format::format(&commit, branches, hash_color)?;
 
                     let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
                         let sec_selected_info = graph.commits.get(sel);
@@ -378,139 +377,136 @@ impl App {
                     } else {
                         commit.parent(0).ok()
                     };
+                    let comp_oid = compare_to.as_ref().map(|c| c.id());
 
                     let mut diffs = vec![];
-                    if let Some(parent) = compare_to {
-                        let diff = graph
-                            .repository
-                            .diff_tree_to_tree(
-                                Some(&parent.tree().map_err(|err| err.message().to_string())?),
-                                Some(&commit.tree().map_err(|err| err.message().to_string())?),
-                                None,
-                            )
-                            .map_err(|err| err.message().to_string())?;
-
-                        let mut diff_err = Ok(());
-                        diff.print(DiffFormat::NameStatus, |d, _h, l| {
-                            let content = std::str::from_utf8(l.content()).unwrap();
-                            let tp = match DiffType::from_str(&content[..1]) {
-                                Ok(tp) => tp,
-                                Err(err) => {
-                                    diff_err = Err(err);
-                                    return false;
-                                }
-                            };
-                            let f = match tp {
-                                DiffType::Deleted | DiffType::Modified => d.old_file(),
-                                DiffType::Added | DiffType::Renamed => d.new_file(),
-                            };
-                            diffs.push((
-                                f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
-                                tp,
-                            ));
-                            true
-                        })
+                    let diff = graph
+                        .repository
+                        .diff_tree_to_tree(
+                            compare_to
+                                .map(|c| c.tree())
+                                .map_or(Ok(None), |v| v.map(Some))
+                                .map_err(|err| err.message().to_string())?
+                                .as_ref(),
+                            Some(&commit.tree().map_err(|err| err.message().to_string())?),
+                            None,
+                        )
                         .map_err(|err| err.message().to_string())?;
 
-                        diff_err?;
-
-                        self.commit_state.content = Some(CommitViewInfo::new(
-                            message_fmt,
-                            StatefulList::with_items(diffs),
-                            info.oid,
-                            parent.id(),
+                    let mut diff_err = Ok(());
+                    diff.print(DiffFormat::NameStatus, |d, _h, l| {
+                        let content = std::str::from_utf8(l.content()).unwrap();
+                        let tp = match DiffType::from_str(&content[..1]) {
+                            Ok(tp) => tp,
+                            Err(err) => {
+                                diff_err = Err(err);
+                                return false;
+                            }
+                        };
+                        let f = match tp {
+                            DiffType::Deleted | DiffType::Modified => d.old_file(),
+                            DiffType::Added | DiffType::Renamed => d.new_file(),
+                        };
+                        diffs.push((
+                            f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
+                            tp,
                         ));
-                    } else {
-                        self.commit_state.content = None;
-                    }
+                        true
+                    })
+                    .map_err(|err| err.message().to_string())?;
+
+                    diff_err?;
+
+                    Some(CommitViewInfo::new(
+                        message_fmt,
+                        StatefulList::with_items(diffs),
+                        info.oid,
+                        comp_oid.unwrap_or_else(Oid::zero),
+                    ))
                 } else {
-                    self.commit_state.content = None;
+                    None
                 }
-            } else {
-                self.commit_state.content = None;
-            }
         }
         self.file_changed()?;
         Ok(())
     }
 
     fn file_changed(&mut self) -> Result<(), String> {
-        self.diff_state.content = None;
-        if let Some(graph) = &self.graph_state.graph {
-            let selected_index = self.graph_state.selected;
-            if let Some(idx) = selected_index {
-                let selected_info = graph.commits.get(idx);
-                if let Some(info) = selected_info {
-                    if let Some(state) = &self.commit_state.content {
-                        if let Some(sel_index) = state.diffs.state.selected() {
-                            let commit = graph
+        if let (Some(graph), Some(state)) = (&self.graph_state.graph, &self.commit_state.content) {
+            self.diff_state.content = if let Some((info, sel_index)) = self
+                .graph_state
+                .selected
+                .and_then(move |sel_idx| graph.commits.get(sel_idx))
+                .and_then(|info| {
+                    state
+                        .diffs
+                        .state
+                        .selected()
+                        .map(|sel_index| (info, sel_index))
+                }) {
+                let commit = graph
+                    .repository
+                    .find_commit(info.oid)
+                    .map_err(|err| err.message().to_string())?;
+
+                let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
+                    let sec_selected_info = graph.commits.get(sel);
+                    if let Some(info) = sec_selected_info {
+                        Some(
+                            graph
                                 .repository
                                 .find_commit(info.oid)
-                                .map_err(|err| err.message().to_string())?;
+                                .map_err(|err| err.message().to_string())?,
+                        )
+                    } else {
+                        commit.parent(0).ok()
+                    }
+                } else {
+                    commit.parent(0).ok()
+                };
+                let comp_oid = compare_to.as_ref().map(|c| c.id());
 
-                            let compare_to = if let Some(sel) = self.graph_state.secondary_selected
-                            {
-                                let sec_selected_info = graph.commits.get(sel);
-                                if let Some(info) = sec_selected_info {
-                                    Some(
-                                        graph
-                                            .repository
-                                            .find_commit(info.oid)
-                                            .map_err(|err| err.message().to_string())?,
-                                    )
-                                } else {
-                                    commit.parent(0).ok()
-                                }
-                            } else {
-                                commit.parent(0).ok()
-                            };
+                let selection = &state.diffs.items[sel_index];
 
-                            let selection = &state.diffs.items[sel_index];
+                let mut opts = DiffOptions::new();
+                opts.pathspec(&selection.0);
+                opts.disable_pathspec_match(true);
+                let diff = graph
+                    .repository
+                    .diff_tree_to_tree(
+                        compare_to
+                            .map(|c| c.tree())
+                            .map_or(Ok(None), |v| v.map(Some))
+                            .map_err(|err| err.message().to_string())?
+                            .as_ref(),
+                        Some(&commit.tree().map_err(|err| err.message().to_string())?),
+                        Some(&mut opts),
+                    )
+                    .map_err(|err| err.message().to_string())?;
 
-                            let mut opts = DiffOptions::new();
+                let mut diff_error = Ok(());
+                let mut diffs = vec![];
 
-                            opts.pathspec(&selection.0);
-                            opts.disable_pathspec_match(true);
-                            if let Some(parent) = compare_to {
-                                let diff = graph
-                                    .repository
-                                    .diff_tree_to_tree(
-                                        Some(
-                                            &parent
-                                                .tree()
-                                                .map_err(|err| err.message().to_string())?,
-                                        ),
-                                        Some(
-                                            &commit
-                                                .tree()
-                                                .map_err(|err| err.message().to_string())?,
-                                        ),
-                                        Some(&mut opts),
-                                    )
-                                    .map_err(|err| err.message().to_string())?;
-
-                                let mut diff_error = Ok(());
-                                let mut diffs = vec![];
-
-                                diff.print(DiffFormat::Patch, |d, h, l| {
-                                    match print_diff_line(d, h, l) {
-                                        Ok(line) => diffs.push(line),
-                                        Err(err) => {
-                                            diff_error = Err(err.to_string());
-                                            return false;
-                                        }
-                                    }
-                                    true
-                                })
-                                .map_err(|err| err.message().to_string())?;
-                                diff_error?;
-
-                                self.diff_state.content =
-                                    Some(DiffViewInfo::new(diffs, info.oid, parent.id()));
-                            }
+                diff.print(DiffFormat::Patch, |d, h, l| {
+                    match print_diff_line(d, h, l) {
+                        Ok(line) => diffs.push(line),
+                        Err(err) => {
+                            diff_error = Err(err.to_string());
+                            return false;
                         }
                     }
-                }
+                    true
+                })
+                .map_err(|err| err.message().to_string())?;
+                diff_error?;
+
+                Some(DiffViewInfo::new(
+                    diffs,
+                    info.oid,
+                    comp_oid.unwrap_or_else(Oid::zero),
+                ))
+            } else {
+                None
             }
         }
         Ok(())
