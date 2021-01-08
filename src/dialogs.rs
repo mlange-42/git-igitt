@@ -41,10 +41,6 @@ impl<'a> FileDialog<'a> {
         self.state.select(Some(i));
     }
 
-    pub fn dismiss_error(&mut self) {
-        self.error_message = None;
-    }
-
     pub fn on_up(&mut self, is_shift: bool) {
         let step = if is_shift { 10 } else { 1 };
         self.bwd(step)

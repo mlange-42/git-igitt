@@ -8,45 +8,44 @@ use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, List, ListItem, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph};
 use tui::Frame;
 
 pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(4), Constraint::Min(0)].as_ref())
+        .split(f.size());
+
+    let top_chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
+        .split(chunks[0]);
+
+    let location_block = Block::default().borders(Borders::ALL).title(" Path ");
+
+    let paragraph = Paragraph::new(format!("{}", &dialog.location.display())).block(location_block);
+    f.render_widget(paragraph, top_chunks[0]);
+
+    let help = Paragraph::new("  Navigate with Arrows, confirm with Enter.");
+    f.render_widget(help, top_chunks[1]);
+
+    let list_block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Open repository ");
+
+    let items: Vec<_> = dialog.dirs.iter().map(|f| ListItem::new(&f[..])).collect();
+
+    let mut list = List::new(items).block(list_block).highlight_symbol("> ");
+
+    if dialog.color {
+        list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+    }
+
+    f.render_stateful_widget(list, chunks[1], &mut dialog.state);
+
     if let Some(error) = &dialog.error_message {
-        draw_error(f, f.size(), error);
-    } else {
-        let chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(4), Constraint::Min(0)].as_ref())
-            .split(f.size());
-
-        let top_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([Constraint::Length(3), Constraint::Min(1)].as_ref())
-            .split(chunks[0]);
-
-        let location_block = Block::default().borders(Borders::ALL).title(" Path ");
-
-        let paragraph =
-            Paragraph::new(format!("{}", &dialog.location.display())).block(location_block);
-        f.render_widget(paragraph, top_chunks[0]);
-
-        let help = Paragraph::new("  Navigate with Arrows, confirm with Enter.");
-        f.render_widget(help, top_chunks[1]);
-
-        let list_block = Block::default()
-            .borders(Borders::ALL)
-            .title(" Open repository ");
-
-        let items: Vec<_> = dialog.dirs.iter().map(|f| ListItem::new(&f[..])).collect();
-
-        let mut list = List::new(items).block(list_block).highlight_symbol("> ");
-
-        if dialog.color {
-            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
-        }
-
-        f.render_stateful_widget(list, chunks[1], &mut dialog.state);
+        draw_error_dialog(f, f.size(), error, dialog.color);
     }
 }
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
@@ -105,6 +104,10 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
         draw_commit(f, right_chunks[0], app);
         draw_files(f, right_chunks[1], app);
+    }
+
+    if let Some(error) = &app.error_message {
+        draw_error_dialog(f, f.size(), error, app.color);
     }
 }
 
@@ -354,12 +357,45 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     f.render_widget(paragraph, target);
 }
 
-fn draw_error<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str) {
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .title(" Error - Press Enter to continue ");
+fn draw_error_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str, color: bool) {
+    let mut block = Block::default()
+        .title(" Error - Press Enter to continue ")
+        .borders(Borders::ALL);
+
+    if color {
+        block = block.border_style(Style::default().fg(Color::LightRed));
+    }
 
     let paragraph = Paragraph::new(error).block(block);
 
-    f.render_widget(paragraph, target);
+    let area = centered_rect(60, 12, target);
+    f.render_widget(Clear, area);
+    f.render_widget(paragraph, area);
+}
+/// helper function to create a centered rect using up
+/// certain percentage of the available rect `r`
+fn centered_rect(size_x: u16, size_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints(
+            [
+                Constraint::Length((r.height - size_y) / 2),
+                Constraint::Min(size_y),
+                Constraint::Length((r.height - size_y) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints(
+            [
+                Constraint::Length((r.width - size_x) / 2),
+                Constraint::Min(size_x),
+                Constraint::Length((r.width - size_x) / 2),
+            ]
+            .as_ref(),
+        )
+        .split(popup_layout[1])[1]
 }

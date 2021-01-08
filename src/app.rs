@@ -88,6 +88,7 @@ pub struct App {
     pub line_numbers: bool,
     pub should_quit: bool,
     pub models_path: PathBuf,
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -108,6 +109,7 @@ impl App {
             line_numbers: true,
             should_quit: false,
             models_path,
+            error_message: None,
         }
     }
 

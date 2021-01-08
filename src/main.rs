@@ -373,84 +373,95 @@ fn run(
     loop {
         app = if let Some(mut app) = app.take() {
             terminal.draw(|f| ui::draw(f, &mut app))?;
-
             let mut open_file = false;
-            match rx.recv()? {
-                Event::Input(event) => match event.code {
-                    KeyCode::Char('q') => {
-                        disable_raw_mode()?;
-                        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                        terminal.show_cursor()?;
-                        break;
-                    }
-                    KeyCode::Char('h') | KeyCode::F(1) => {
-                        app.show_help();
-                    }
-                    KeyCode::Char('m') => {
-                        app.select_model()?;
-                    }
-                    KeyCode::Char('r') => {
-                        app = app.reload(&settings, max_commits)?;
-                    }
-                    KeyCode::Char('l') => {
-                        if event.modifiers.contains(KeyModifiers::CONTROL) {
-                            app.toggle_line_numbers()?;
-                        } else {
-                            app.toggle_layout();
-                        }
-                    }
-                    KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        if let Some(graph) = &app.graph_state.graph {
-                            let path = graph.repository.path();
-                            let path = path.parent().unwrap_or(path);
-                            file_dialog.location = PathBuf::from(path.parent().unwrap_or(path));
-                            file_dialog.selection = Some(PathBuf::from(path));
-                        } else {
-                            file_dialog.location = std::env::current_dir()?;
-                            file_dialog.selection = None
-                        }
-                        open_file = true;
-                    }
 
-                    KeyCode::Char('p') => {
-                        if app.active_view == ActiveView::Models {
-                            let (a, s) = set_app_model(app, settings, max_commits, true)?;
-                            app = a;
-                            settings = s;
+            if app.error_message.is_some() {
+                if let Event::Input(event) = rx.recv()? {
+                    match event.code {
+                        KeyCode::Enter | KeyCode::Esc => {
+                            app.error_message = None;
                         }
-                    }
-
-                    KeyCode::Up => app.on_up(
-                        event.modifiers.contains(KeyModifiers::SHIFT),
-                        event.modifiers.contains(KeyModifiers::CONTROL),
-                    )?,
-                    KeyCode::Down => app.on_down(
-                        event.modifiers.contains(KeyModifiers::SHIFT),
-                        event.modifiers.contains(KeyModifiers::CONTROL),
-                    )?,
-                    KeyCode::Home => app.on_home()?,
-                    KeyCode::End => app.on_end()?,
-                    KeyCode::Left => app.on_left(),
-                    KeyCode::Right => app.on_right(),
-                    KeyCode::Tab => app.on_tab(),
-                    KeyCode::Esc => app.on_esc(),
-                    KeyCode::Enter => {
-                        if app.active_view == ActiveView::Models {
-                            let (a, s) = set_app_model(app, settings, max_commits, false)?;
-                            app = a;
-                            settings = s;
-                        } else {
-                            app.on_enter()?
-                        }
-                    }
-                    _ => {}
-                },
-                Event::Update => {
-                    if app.graph_state.graph.is_some() && has_changed(&mut app)? {
-                        app = app.reload(&settings, max_commits)?;
+                        _ => {}
                     }
                 }
-                Event::Tick => {}
+            } else {
+                match rx.recv()? {
+                    Event::Input(event) => match event.code {
+                        KeyCode::Char('q') => {
+                            disable_raw_mode()?;
+                            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                            terminal.show_cursor()?;
+                            break;
+                        }
+                        KeyCode::Char('h') | KeyCode::F(1) => {
+                            app.show_help();
+                        }
+                        KeyCode::Char('m') => {
+                            app.select_model()?;
+                        }
+                        KeyCode::Char('r') => {
+                            app = app.reload(&settings, max_commits)?;
+                        }
+                        KeyCode::Char('l') => {
+                            if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                app.toggle_line_numbers()?;
+                            } else {
+                                app.toggle_layout();
+                            }
+                        }
+                        KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                            if let Some(graph) = &app.graph_state.graph {
+                                let path = graph.repository.path();
+                                let path = path.parent().unwrap_or(path);
+                                file_dialog.location = PathBuf::from(path.parent().unwrap_or(path));
+                                file_dialog.selection = Some(PathBuf::from(path));
+                            } else {
+                                file_dialog.location = std::env::current_dir()?;
+                                file_dialog.selection = None
+                            }
+                            open_file = true;
+                        }
+
+                        KeyCode::Char('p') => {
+                            if app.active_view == ActiveView::Models {
+                                let (a, s) = set_app_model(app, settings, max_commits, true)?;
+                                app = a;
+                                settings = s;
+                            }
+                        }
+
+                        KeyCode::Up => app.on_up(
+                            event.modifiers.contains(KeyModifiers::SHIFT),
+                            event.modifiers.contains(KeyModifiers::CONTROL),
+                        )?,
+                        KeyCode::Down => app.on_down(
+                            event.modifiers.contains(KeyModifiers::SHIFT),
+                            event.modifiers.contains(KeyModifiers::CONTROL),
+                        )?,
+                        KeyCode::Home => app.on_home()?,
+                        KeyCode::End => app.on_end()?,
+                        KeyCode::Left => app.on_left(),
+                        KeyCode::Right => app.on_right(),
+                        KeyCode::Tab => app.on_tab(),
+                        KeyCode::Esc => app.on_esc(),
+                        KeyCode::Enter => {
+                            if app.active_view == ActiveView::Models {
+                                let (a, s) = set_app_model(app, settings, max_commits, false)?;
+                                app = a;
+                                settings = s;
+                            } else {
+                                app.on_enter()?
+                            }
+                        }
+                        _ => {}
+                    },
+                    Event::Update => {
+                        if app.graph_state.graph.is_some() && has_changed(&mut app)? {
+                            app = app.reload(&settings, max_commits)?;
+                        }
+                    }
+                    Event::Tick => {}
+                }
             }
             if app.should_quit {
                 break;
@@ -470,7 +481,16 @@ fn run(
             terminal.draw(|f| ui::draw_open_repo(f, &mut file_dialog))?;
 
             let mut app = None;
-            if let Event::Input(event) = rx.recv()? {
+            if file_dialog.error_message.is_some() {
+                if let Event::Input(event) = rx.recv()? {
+                    match event.code {
+                        KeyCode::Enter | KeyCode::Esc => {
+                            file_dialog.error_message = None;
+                        }
+                        _ => {}
+                    }
+                }
+            } else if let Event::Input(event) = rx.recv()? {
                 match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
@@ -501,29 +521,20 @@ fn run(
                     KeyCode::Left => file_dialog.on_left()?,
                     KeyCode::Right => file_dialog.on_right()?,
                     KeyCode::Enter => {
-                        if file_dialog.error_message.is_some() {
-                            file_dialog.dismiss_error();
-                        } else {
-                            file_dialog.on_enter();
-                            if let Some(path) = &file_dialog.selection {
-                                match get_repo(path) {
-                                    Ok(repo) => {
-                                        app = Some(create_app(
-                                            repo,
-                                            &mut settings,
-                                            model,
-                                            max_commits,
-                                        )?)
-                                    }
-                                    Err(err) => {
-                                        file_dialog.error_message = Some(format!(
-                                            "Can't open repository at {}\n{}",
-                                            path.display(),
-                                            err.message().to_string()
-                                        ));
-                                    }
-                                };
-                            }
+                        file_dialog.on_enter();
+                        if let Some(path) = &file_dialog.selection {
+                            match get_repo(path) {
+                                Ok(repo) => {
+                                    app = Some(create_app(repo, &mut settings, model, max_commits)?)
+                                }
+                                Err(err) => {
+                                    file_dialog.error_message = Some(format!(
+                                        "Can't open repository at {}\n{}",
+                                        path.display(),
+                                        err.message().to_string()
+                                    ));
+                                }
+                            };
                         }
                     }
                     _ => {}
