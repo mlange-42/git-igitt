@@ -355,7 +355,9 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
 }
 
 fn draw_error<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str) {
-    let block = Block::default().borders(Borders::ALL).title(" Error ");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Error - Press Enter to continue ");
 
     let paragraph = Paragraph::new(error).block(block);
 

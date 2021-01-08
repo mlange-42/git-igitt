@@ -57,20 +57,43 @@ impl<'a> FileDialog<'a> {
 
     pub fn on_left(&mut self) -> Result<(), String> {
         if let Some(par) = self.location.parent() {
+            let temp_path = self.location.clone();
             let prev = self.location.clone();
-            self.location = PathBuf::from(par);
-            self.selection_changed(Some(prev))?;
+            let path = PathBuf::from(par);
+            self.location = path.clone();
+            match self.selection_changed(Some(prev)) {
+                Ok(_) => {}
+                Err(err) => {
+                    self.location = temp_path;
+                    self.error_message = Some(format!(
+                        "Problem entering directory {}\n{}",
+                        path.display(),
+                        err
+                    ));
+                }
+            };
         }
         Ok(())
     }
 
     pub fn on_right(&mut self) -> Result<(), String> {
         if let Some(sel) = self.state.selected() {
+            let temp_path = self.location.clone();
             let file = &self.dirs[sel];
             let mut path = PathBuf::from(&self.location);
             path.push(file);
-            self.location = path;
-            self.selection_changed(None)?;
+            self.location = path.clone();
+            match self.selection_changed(None) {
+                Ok(_) => {}
+                Err(err) => {
+                    self.location = temp_path;
+                    self.error_message = Some(format!(
+                        "Problem entering directory {}\n{}",
+                        path.display(),
+                        err
+                    ));
+                }
+            };
         }
         Ok(())
     }

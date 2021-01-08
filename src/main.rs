@@ -475,9 +475,12 @@ fn run(
                                 Ok(repo) => {
                                     app = Some(create_app(repo, &mut settings, model, max_commits)?)
                                 }
-                                Err(_) => {
-                                    file_dialog.error_message =
-                                        Some(format!("Not a Git repository: {}", path.display()));
+                                Err(err) => {
+                                    file_dialog.error_message = Some(format!(
+                                        "Can't open repository at {}\n{}",
+                                        path.display(),
+                                        err.message().to_string()
+                                    ));
                                 }
                             };
                         }
@@ -503,10 +506,11 @@ fn run(
                                             max_commits,
                                         )?)
                                     }
-                                    Err(_) => {
+                                    Err(err) => {
                                         file_dialog.error_message = Some(format!(
-                                            "Not a Git repository: {}",
-                                            path.display()
+                                            "Can't open repository at {}\n{}",
+                                            path.display(),
+                                            err.message().to_string()
                                         ));
                                     }
                                 };
