@@ -1,29 +1,33 @@
 use clap::{crate_version, Arg, SubCommand};
-use crossterm::event::KeyModifiers;
 use crossterm::{
-    event::{self, Event as CEvent, KeyCode},
+    event::{self, Event as CEvent, KeyCode, KeyModifiers},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
 use git2::Repository;
-use git_graph::config::{create_config, get_available_models, get_model, get_model_name};
-use git_graph::get_repo;
-use git_graph::graph::GitGraph;
-use git_graph::print::format::CommitFormat;
-use git_graph::print::unicode::print_unicode;
-use git_graph::settings::{
-    BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, RepoSettings,
-    Settings,
+use git_graph::{
+    config::{create_config, get_available_models, get_model, get_model_name},
+    get_repo,
+    graph::GitGraph,
+    print::{format::CommitFormat, unicode::print_unicode},
+    settings::{
+        BranchOrder, BranchSettings, BranchSettingsDef, Characters, MergePatterns, RepoSettings,
+        Settings,
+    },
 };
-use git_igitt::app::{ActiveView, App, CurrentBranches};
-use git_igitt::dialogs::FileDialog;
-use git_igitt::ui;
+use git_igitt::{
+    app::{ActiveView, App, CurrentBranches},
+    dialogs::FileDialog,
+    ui,
+};
 use platform_dirs::AppDirs;
-use std::error::Error;
-use std::io::stdout;
-use std::path::{Path, PathBuf};
-use std::str::FromStr;
-use std::time::{Duration, Instant};
+use std::{
+    error::Error,
+    io::stdout,
+    path::{Path, PathBuf},
+    str::FromStr,
+    time::{Duration, Instant},
+};
 use tui::{backend::CrosstermBackend, Terminal};
 
 const REPO_CONFIG_FILE: &str = "git-graph.toml";
@@ -40,6 +44,11 @@ fn main() {
     std::process::exit(match from_args() {
         Ok(_) => 0,
         Err(err) => {
+            let mut sout = stdout();
+            match execute!(sout, LeaveAlternateScreen) {
+                Ok(_) => {}
+                Err(err) => eprintln!("{}", err),
+            }
             eprintln!("{}", err);
             1
         }
