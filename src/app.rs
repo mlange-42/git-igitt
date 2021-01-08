@@ -518,6 +518,13 @@ impl App {
         }
         Ok(())
     }
+
+    pub fn set_error(&mut self, msg: String) {
+        self.error_message = Some(msg);
+    }
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
+    }
 }
 
 fn print_diff_line(

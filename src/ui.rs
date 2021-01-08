@@ -8,7 +8,7 @@ use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph};
+use tui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap};
 use tui::Frame;
 
 pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
@@ -366,7 +366,7 @@ fn draw_error_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str, co
         block = block.border_style(Style::default().fg(Color::LightRed));
     }
 
-    let paragraph = Paragraph::new(error).block(block);
+    let paragraph = Paragraph::new(error).block(block).wrap(Wrap { trim: true });
 
     let area = centered_rect(60, 12, target);
     f.render_widget(Clear, area);
