@@ -1,7 +1,7 @@
 use clap::{crate_version, Arg, SubCommand};
 use crossterm::event::KeyModifiers;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event as CEvent, KeyCode},
+    event::{self, Event as CEvent, KeyCode},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -313,7 +313,7 @@ fn run(
     enable_raw_mode()?;
 
     let mut sout = stdout();
-    execute!(sout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(sout, EnterAlternateScreen)?;
 
     let backend = CrosstermBackend::new(sout);
     let mut terminal = Terminal::new(backend)?;
@@ -370,11 +370,7 @@ fn run(
                 Event::Input(event) => match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
-                        execute!(
-                            terminal.backend_mut(),
-                            LeaveAlternateScreen,
-                            DisableMouseCapture
-                        )?;
+                        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
                         terminal.show_cursor()?;
                         break;
                     }
@@ -469,11 +465,7 @@ fn run(
                 match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
-                        execute!(
-                            terminal.backend_mut(),
-                            LeaveAlternateScreen,
-                            DisableMouseCapture
-                        )?;
+                        execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
                         terminal.show_cursor()?;
                         break;
                     }
