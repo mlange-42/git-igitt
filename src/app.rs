@@ -1,7 +1,8 @@
-use crate::widgets::commit_view::{CommitViewInfo, CommitViewState};
+use crate::widgets::branches_view::{BranchItem, BranchItemType};
+use crate::widgets::commit_view::{CommitViewInfo, CommitViewState, DiffItem};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
-use crate::widgets::files_view::StatefulList;
 use crate::widgets::graph_view::GraphViewState;
+use crate::widgets::list::StatefulList;
 use crate::widgets::models_view::ModelListState;
 use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, Oid};
 use git_graph::config::get_available_models;
@@ -17,6 +18,7 @@ const HASH_COLOR: u8 = 11;
 
 #[derive(PartialEq)]
 pub enum ActiveView {
+    Branches,
     Graph,
     Commit,
     Files,
@@ -84,6 +86,7 @@ pub struct App {
     pub curr_branches: Vec<(Option<String>, Option<Oid>)>,
     pub is_fullscreen: bool,
     pub horizontal_split: bool,
+    pub show_branches: bool,
     pub color: bool,
     pub line_numbers: bool,
     pub should_quit: bool,
@@ -105,6 +108,7 @@ impl App {
             curr_branches: vec![],
             is_fullscreen: false,
             horizontal_split: true,
+            show_branches: false,
             color: true,
             line_numbers: true,
             should_quit: false,
@@ -114,9 +118,13 @@ impl App {
     }
 
     pub fn with_graph(mut self, graph: GitGraph, text: Vec<String>, indices: Vec<usize>) -> App {
+        let branches = get_branches(&graph);
+
         self.graph_state.graph = Some(graph);
         self.graph_state.text = text;
         self.graph_state.indices = indices;
+        self.graph_state.branches = Some(StatefulList::with_items(branches));
+
         self
     }
 
@@ -177,6 +185,11 @@ impl App {
                     self.selection_changed()?;
                 }
             }
+            ActiveView::Branches => {
+                if let Some(list) = &mut self.graph_state.branches {
+                    list.bwd(step);
+                }
+            }
             ActiveView::Help(scroll) => {
                 self.active_view = ActiveView::Help(scroll.saturating_sub(step as u16))
             }
@@ -215,6 +228,11 @@ impl App {
                     }
                 } else if self.graph_state.move_selection(step, true) {
                     self.selection_changed()?;
+                }
+            }
+            ActiveView::Branches => {
+                if let Some(list) = &mut self.graph_state.branches {
+                    list.fwd(step);
                 }
             }
             ActiveView::Help(scroll) => {
@@ -266,6 +284,7 @@ impl App {
     }
     pub fn on_right(&mut self) {
         self.active_view = match &self.active_view {
+            ActiveView::Branches => ActiveView::Graph,
             ActiveView::Graph => ActiveView::Commit,
             ActiveView::Commit => ActiveView::Files,
             ActiveView::Files => ActiveView::Diff,
@@ -276,7 +295,8 @@ impl App {
     }
     pub fn on_left(&mut self) {
         self.active_view = match &self.active_view {
-            ActiveView::Graph => ActiveView::Graph,
+            ActiveView::Branches => ActiveView::Branches,
+            ActiveView::Graph => ActiveView::Branches,
             ActiveView::Commit => ActiveView::Graph,
             ActiveView::Files => ActiveView::Commit,
             ActiveView::Diff => ActiveView::Files,
@@ -318,6 +338,10 @@ impl App {
 
     pub fn toggle_layout(&mut self) {
         self.horizontal_split = !self.horizontal_split;
+    }
+
+    pub fn toggle_branches(&mut self) {
+        self.show_branches = !self.show_branches;
     }
 
     pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
@@ -419,10 +443,10 @@ impl App {
                             DiffType::Deleted | DiffType::Modified => d.old_file(),
                             DiffType::Added | DiffType::Renamed => d.new_file(),
                         };
-                        diffs.push((
-                            f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
-                            tp,
-                        ));
+                        diffs.push(DiffItem {
+                            file: f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
+                            diff_type: tp,
+                        });
                         true
                     })
                     .map_err(|err| err.message().to_string())?;
@@ -481,7 +505,7 @@ impl App {
                 let selection = &state.diffs.items[sel_index];
 
                 let mut opts = DiffOptions::new();
-                opts.pathspec(&selection.0);
+                opts.pathspec(&selection.file);
                 opts.disable_pathspec_match(true);
                 let diff = graph
                     .repository
@@ -544,4 +568,56 @@ fn print_diff_line(
     }
     write!(out, "{}", std::str::from_utf8(line.content()).unwrap())?;
     Ok(out)
+}
+
+fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
+    let mut branches = Vec::new();
+
+    branches.push(BranchItem::new(
+        "BRANCHES".to_string(),
+        7,
+        BranchItemType::Heading,
+    ));
+    for idx in &graph.branches {
+        let branch = &graph.all_branches[*idx];
+        if !branch.is_remote {
+            branches.push(BranchItem::new(
+                branch.name.clone(),
+                branch.visual.term_color,
+                BranchItemType::LocalBranch,
+            ));
+        }
+    }
+
+    branches.push(BranchItem::new(
+        "REMOTES".to_string(),
+        7,
+        BranchItemType::Heading,
+    ));
+    for idx in &graph.branches {
+        let branch = &graph.all_branches[*idx];
+        if branch.is_remote {
+            branches.push(BranchItem::new(
+                branch.name.clone(),
+                branch.visual.term_color,
+                BranchItemType::RemoteBranch,
+            ));
+        }
+    }
+
+    branches.push(BranchItem::new(
+        "TAGS".to_string(),
+        7,
+        BranchItemType::Heading,
+    ));
+    for idx in &graph.tags {
+        let branch = &graph.all_branches[*idx];
+        branches.push(BranchItem::new(
+            branch.name.clone(),
+            branch.visual.term_color,
+            BranchItemType::Tag,
+        ));
+    }
+
+    branches
 }

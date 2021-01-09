@@ -1,15 +1,86 @@
-use crate::widgets::list::{DefaultListItem, ListState};
+use crate::widgets::list::{ListItem, ListState};
 use tui::buffer::Buffer;
 use tui::layout::{Corner, Rect};
 use tui::style::Style;
+use tui::text::Text;
 use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
+#[derive(Debug, Clone, PartialEq)]
+pub enum BranchItemType {
+    LocalBranch,
+    RemoteBranch,
+    Tag,
+    Heading,
+}
+
+impl BranchItemType {
+    pub fn is_selectable(&self) -> bool {
+        self != &BranchItemType::Heading
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct BranchListItem<'a> {
+    pub content: Text<'a>,
+    pub style: Style,
+    pub item_type: &'a BranchItemType,
+}
+
+impl<'a> BranchListItem<'a> {
+    pub fn new<T>(content: T, item_type: &'a BranchItemType) -> BranchListItem<'a>
+    where
+        T: Into<Text<'a>>,
+    {
+        BranchListItem {
+            content: content.into(),
+            style: Style::default(),
+            item_type,
+        }
+    }
+
+    pub fn style(mut self, style: Style) -> BranchListItem<'a> {
+        self.style = style;
+        self
+    }
+
+    pub fn height(&self) -> usize {
+        self.content.height()
+    }
+}
+
+pub struct BranchItem {
+    pub(crate) name: String,
+    pub(crate) color: u8,
+    pub(crate) branch_type: BranchItemType,
+}
+
+impl BranchItem {
+    pub fn new(name: String, color: u8, branch_type: BranchItemType) -> Self {
+        Self {
+            name,
+            color,
+            branch_type,
+        }
+    }
+}
+
+impl ListItem for BranchItem {
+    fn is_selectable(&self) -> bool {
+        self.branch_type != BranchItemType::Heading
+    }
+}
+
+impl<'a> ListItem for BranchListItem<'a> {
+    fn is_selectable(&self) -> bool {
+        self.item_type != &BranchItemType::Heading
+    }
+}
+
 #[derive(Debug, Clone)]
-pub struct FileList<'a> {
+pub struct BranchList<'a> {
     block: Option<Block<'a>>,
-    items: Vec<DefaultListItem<'a>>,
-    /// Style used as a base style for the widget
+    items: Vec<BranchListItem<'a>>,
     style: Style,
     start_corner: Corner,
     /// Style used to render selected item
@@ -18,12 +89,12 @@ pub struct FileList<'a> {
     highlight_symbol: Option<&'a str>,
 }
 
-impl<'a> FileList<'a> {
-    pub fn new<T>(items: T) -> FileList<'a>
+impl<'a> BranchList<'a> {
+    pub fn new<T>(items: T) -> BranchList<'a>
     where
-        T: Into<Vec<DefaultListItem<'a>>>,
+        T: Into<Vec<BranchListItem<'a>>>,
     {
-        FileList {
+        BranchList {
             block: None,
             style: Style::default(),
             items: items.into(),
@@ -33,33 +104,33 @@ impl<'a> FileList<'a> {
         }
     }
 
-    pub fn block(mut self, block: Block<'a>) -> FileList<'a> {
+    pub fn block(mut self, block: Block<'a>) -> BranchList<'a> {
         self.block = Some(block);
         self
     }
 
-    pub fn style(mut self, style: Style) -> FileList<'a> {
+    pub fn style(mut self, style: Style) -> BranchList<'a> {
         self.style = style;
         self
     }
 
-    pub fn highlight_symbol(mut self, highlight_symbol: &'a str) -> FileList<'a> {
+    pub fn highlight_symbol(mut self, highlight_symbol: &'a str) -> BranchList<'a> {
         self.highlight_symbol = Some(highlight_symbol);
         self
     }
 
-    pub fn highlight_style(mut self, style: Style) -> FileList<'a> {
+    pub fn highlight_style(mut self, style: Style) -> BranchList<'a> {
         self.highlight_style = style;
         self
     }
 
-    pub fn start_corner(mut self, corner: Corner) -> FileList<'a> {
+    pub fn start_corner(mut self, corner: Corner) -> BranchList<'a> {
         self.start_corner = corner;
         self
     }
 }
 
-impl<'a> StatefulWidget for FileList<'a> {
+impl<'a> StatefulWidget for BranchList<'a> {
     type State = ListState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -146,7 +217,7 @@ impl<'a> StatefulWidget for FileList<'a> {
             buf.set_style(area, item_style);
 
             let is_selected = state.selected.map(|s| s == i).unwrap_or(false);
-            let elem_x = {
+            let elem_x = if item.is_selectable() {
                 let symbol = if is_selected {
                     highlight_symbol
                 } else {
@@ -154,7 +225,10 @@ impl<'a> StatefulWidget for FileList<'a> {
                 };
                 let (x, _) = buf.set_stringn(x, y, symbol, list_area.width as usize, item_style);
                 x
+            } else {
+                x
             };
+
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
             for (j, line) in item.content.lines.iter().enumerate() {
                 buf.set_spans(elem_x, y + j as u16, line, max_element_width as u16);
@@ -166,7 +240,7 @@ impl<'a> StatefulWidget for FileList<'a> {
     }
 }
 
-impl<'a> Widget for FileList<'a> {
+impl<'a> Widget for BranchList<'a> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = ListState::default();
         StatefulWidget::render(self, area, buf, &mut state);

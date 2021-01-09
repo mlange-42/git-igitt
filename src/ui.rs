@@ -1,14 +1,18 @@
 use crate::app::{ActiveView, App};
 use crate::dialogs::FileDialog;
+use crate::widgets::branches_view::{BranchList, BranchListItem};
 use crate::widgets::commit_view::CommitView;
-use crate::widgets::files_view::{FileList, FileListItem};
+use crate::widgets::files_view::FileList;
 use crate::widgets::graph_view::GraphView;
+use crate::widgets::list::DefaultListItem;
 use crate::widgets::models_view::ModelListState;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
 use tui::text::Text;
-use tui::widgets::{Block, BorderType, Borders, Clear, List, ListItem, Paragraph, Wrap};
+use tui::widgets::{
+    Block, BorderType, Borders, Clear, List, ListItem as TuiListItem, Paragraph, Wrap,
+};
 use tui::Frame;
 
 pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
@@ -34,7 +38,11 @@ pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
         .borders(Borders::ALL)
         .title(" Open repository ");
 
-    let items: Vec<_> = dialog.dirs.iter().map(|f| ListItem::new(&f[..])).collect();
+    let items: Vec<_> = dialog
+        .dirs
+        .iter()
+        .map(|f| TuiListItem::new(&f[..]))
+        .collect();
 
     let mut list = List::new(items).block(list_block).highlight_symbol("> ");
 
@@ -69,6 +77,7 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     if app.is_fullscreen {
         match app.active_view {
+            ActiveView::Branches => draw_branches(f, f.size(), app),
             ActiveView::Graph => draw_graph(f, f.size(), app),
             ActiveView::Commit => draw_commit(f, f.size(), app),
             ActiveView::Files => draw_files(f, f.size(), app),
@@ -87,10 +96,23 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             Direction::Horizontal
         };
 
+        let show_branches = app.show_branches || app.active_view == ActiveView::Branches;
+
+        let top_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints(
+                [
+                    Constraint::Length(if show_branches { 25 } else { 0 }),
+                    Constraint::Min(0),
+                ]
+                .as_ref(),
+            )
+            .split(f.size());
+
         let chunks = Layout::default()
             .direction(base_split)
             .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            .split(f.size());
+            .split(top_chunks[1]);
 
         let right_chunks = Layout::default()
             .direction(sub_split)
@@ -101,7 +123,9 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             ActiveView::Files | ActiveView::Diff => draw_diff(f, chunks[0], app),
             _ => draw_graph(f, chunks[0], app),
         }
-
+        if show_branches {
+            draw_branches(f, top_chunks[0], app);
+        }
         draw_commit(f, right_chunks[0], app);
         draw_files(f, right_chunks[1], app);
     }
@@ -126,6 +150,45 @@ fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     }
 
     f.render_stateful_widget(graph, target, &mut app.graph_state);
+}
+
+fn draw_branches<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
+    let color = app.color;
+    if let Some(state) = &mut app.graph_state.branches {
+        let mut block = Block::default().borders(Borders::ALL).title(" Branches ");
+        if app.active_view == ActiveView::Branches {
+            block = block.border_type(BorderType::Thick);
+        }
+
+        let items: Vec<_> = state
+            .items
+            .iter()
+            .map(|item| {
+                BranchListItem::new(
+                    if color {
+                        Text::styled(&item.name, Style::default().fg(Color::Indexed(item.color)))
+                    } else {
+                        Text::raw(&item.name)
+                    },
+                    &item.branch_type,
+                )
+            })
+            .collect();
+
+        let mut list = BranchList::new(items).block(block).highlight_symbol("> ");
+
+        if color {
+            list = list.highlight_style(Style::default().add_modifier(Modifier::UNDERLINED));
+        }
+
+        f.render_stateful_widget(list, target, &mut state.state);
+    } else {
+        let mut block = Block::default().borders(Borders::ALL).title("Files");
+        if app.active_view == ActiveView::Files {
+            block = block.border_type(BorderType::Thick);
+        }
+        f.render_widget(block, target);
+    }
 }
 
 fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
@@ -156,13 +219,13 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             .items
             .iter()
             .map(|item| {
-                FileListItem::new(if color {
+                DefaultListItem::new(if color {
                     Text::styled(
-                        format!("{} {}", item.1.to_string(), item.0),
-                        Style::default().fg(item.1.to_color()),
+                        format!("{} {}", item.diff_type.to_string(), item.file),
+                        Style::default().fg(item.diff_type.to_color()),
                     )
                 } else {
-                    Text::raw(format!("{} {}", item.1.to_string(), item.0))
+                    Text::raw(format!("{} {}", item.diff_type.to_string(), item.file))
                 })
             })
             .collect();
@@ -317,7 +380,11 @@ fn draw_models<B: Backend>(
         .borders(Borders::ALL)
         .title(" Branching model ");
 
-    let items: Vec<_> = state.models.iter().map(|m| ListItem::new(&m[..])).collect();
+    let items: Vec<_> = state
+        .models
+        .iter()
+        .map(|m| TuiListItem::new(&m[..]))
+        .collect();
 
     let mut list = List::new(items).block(block).highlight_symbol("> ");
 
@@ -347,6 +414,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Tab              Panel to fullscreen\n\
          Ecs              Return to default view\n\
          L                Toggle horizontal/vertical layout\n\
+         B                Toggle show branch list\n\
          Ctrl + L         Toggle line numbers in diff\n\
          \n\
          R                Reload repository graph",

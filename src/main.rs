@@ -417,6 +417,9 @@ fn run(
                                 app.toggle_layout();
                             }
                         }
+                        KeyCode::Char('b') => {
+                            app.toggle_branches();
+                        }
                         KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                             if let Some(graph) = &app.graph_state.graph {
                                 let path = graph.repository.path();
