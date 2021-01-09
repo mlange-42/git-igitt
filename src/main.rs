@@ -471,7 +471,12 @@ fn run(
                                     app.active_view = ActiveView::Graph;
                                 }
                             } else {
-                                app.on_enter()?
+                                app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if app.active_view != ActiveView::Models {
+                                app.on_backspace()?
                             }
                         }
                         _ => {}

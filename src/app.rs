@@ -305,11 +305,43 @@ impl App {
         }
     }
 
-    pub fn on_enter(&mut self) -> Result<(), String> {
+    pub fn on_enter(&mut self, is_control: bool) -> Result<(), String> {
         match &self.active_view {
             ActiveView::Help(_) => {
                 self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph)
             }
+            ActiveView::Branches => {
+                if let Some(graph) = &self.graph_state.graph {
+                    if let Some(state) = &self.graph_state.branches {
+                        if let Some(sel) = state.state.selected() {
+                            let br = &state.items[sel];
+                            if let Some(index) = br.index {
+                                let branch_info = &graph.all_branches[index];
+                                let commit_idx = graph.indices[&branch_info.target];
+                                if is_control {
+                                    if self.graph_state.selected.is_some() {
+                                        self.graph_state.secondary_selected = Some(commit_idx);
+                                        self.graph_state.secondary_changed = true;
+                                        self.selection_changed()?;
+                                    }
+                                } else {
+                                    self.graph_state.selected = Some(commit_idx);
+                                    self.graph_state.secondary_changed = false;
+                                    self.selection_changed()?;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {}
+        }
+        Ok(())
+    }
+
+    pub fn on_backspace(&mut self) -> Result<(), String> {
+        match &self.active_view {
+            ActiveView::Help(_) | ActiveView::Models => {}
             _ => {
                 if self.graph_state.secondary_selected.is_some() {
                     self.graph_state.secondary_selected = None;
@@ -575,6 +607,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
 
     branches.push(BranchItem::new(
         "BRANCHES".to_string(),
+        None,
         7,
         BranchItemType::Heading,
     ));
@@ -583,6 +616,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
         if !branch.is_remote {
             branches.push(BranchItem::new(
                 branch.name.clone(),
+                Some(*idx),
                 branch.visual.term_color,
                 BranchItemType::LocalBranch,
             ));
@@ -591,6 +625,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
 
     branches.push(BranchItem::new(
         "REMOTES".to_string(),
+        None,
         7,
         BranchItemType::Heading,
     ));
@@ -599,6 +634,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
         if branch.is_remote {
             branches.push(BranchItem::new(
                 branch.name.clone(),
+                Some(*idx),
                 branch.visual.term_color,
                 BranchItemType::RemoteBranch,
             ));
@@ -607,6 +643,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
 
     branches.push(BranchItem::new(
         "TAGS".to_string(),
+        None,
         7,
         BranchItemType::Heading,
     ));
@@ -614,6 +651,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
         let branch = &graph.all_branches[*idx];
         branches.push(BranchItem::new(
             branch.name.clone(),
+            Some(*idx),
             branch.visual.term_color,
             BranchItemType::Tag,
         ));

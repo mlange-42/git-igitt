@@ -51,14 +51,16 @@ impl<'a> BranchListItem<'a> {
 
 pub struct BranchItem {
     pub(crate) name: String,
+    pub(crate) index: Option<usize>,
     pub(crate) color: u8,
     pub(crate) branch_type: BranchItemType,
 }
 
 impl BranchItem {
-    pub fn new(name: String, color: u8, branch_type: BranchItemType) -> Self {
+    pub fn new(name: String, index: Option<usize>, color: u8, branch_type: BranchItemType) -> Self {
         Self {
             name,
+            index,
             color,
             branch_type,
         }

@@ -408,7 +408,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Shift + Up/Down  Navigate fast\n\
          Home/End         Navigate to first/last\n\
          Ctrl + Up/Down   Secondary selection (compare arbitrary commits)\n\
-         Return           Clear secondary selection\n\
+         Backspace        Clear secondary selection\n\
+         Enter            Jump to selected branch/tag\n\
          \n\
          Left/Right       Change panel\n\
          Tab              Panel to fullscreen\n\
