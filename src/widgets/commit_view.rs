@@ -1,6 +1,6 @@
 use crate::app::DiffType;
 use crate::util::ctrl_chars::CtrlChars;
-use crate::widgets::files_view::StatefulList;
+use crate::widgets::list::{ListItem, StatefulList};
 use git2::Oid;
 use tui::buffer::Buffer;
 use tui::layout::Rect;
@@ -17,9 +17,20 @@ impl Default for CommitViewState {
     }
 }
 
+pub struct DiffItem {
+    pub(crate) file: String,
+    pub(crate) diff_type: DiffType,
+}
+
+impl ListItem for DiffItem {
+    fn is_selectable(&self) -> bool {
+        true
+    }
+}
+
 pub struct CommitViewInfo {
     pub text: Vec<String>,
-    pub diffs: StatefulList<(String, DiffType)>,
+    pub diffs: StatefulList<DiffItem>,
     pub oid: Oid,
     pub compare_oid: Oid,
     pub scroll: u16,
@@ -27,7 +38,7 @@ pub struct CommitViewInfo {
 impl CommitViewInfo {
     pub fn new(
         text: Vec<String>,
-        diffs: StatefulList<(String, DiffType)>,
+        diffs: StatefulList<DiffItem>,
         oid: Oid,
         compare_oid: Oid,
     ) -> Self {

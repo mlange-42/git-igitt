@@ -1,4 +1,6 @@
 use crate::util::ctrl_chars::CtrlChars;
+use crate::widgets::branches_view::BranchItem;
+use crate::widgets::list::StatefulList;
 use git_graph::graph::GitGraph;
 use std::iter::{self, Iterator};
 use tui::buffer::Buffer;
@@ -13,6 +15,7 @@ pub struct GraphViewState {
     pub indices: Vec<usize>,
     pub offset: usize,
     pub selected: Option<usize>,
+    pub branches: Option<StatefulList<BranchItem>>,
     pub secondary_selected: Option<usize>,
     pub secondary_changed: bool,
 }
@@ -25,6 +28,7 @@ impl Default for GraphViewState {
             indices: vec![],
             offset: 0,
             selected: None,
+            branches: None,
             secondary_selected: None,
             secondary_changed: false,
         }

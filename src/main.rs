@@ -417,6 +417,9 @@ fn run(
                                 app.toggle_layout();
                             }
                         }
+                        KeyCode::Char('b') => {
+                            app.toggle_branches();
+                        }
                         KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                             if let Some(graph) = &app.graph_state.graph {
                                 let path = graph.repository.path();
@@ -468,7 +471,12 @@ fn run(
                                     app.active_view = ActiveView::Graph;
                                 }
                             } else {
-                                app.on_enter()?
+                                app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                            }
+                        }
+                        KeyCode::Backspace => {
+                            if app.active_view != ActiveView::Models {
+                                app.on_backspace()?
                             }
                         }
                         _ => {}
