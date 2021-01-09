@@ -381,6 +381,12 @@ fn run(
                         KeyCode::Enter | KeyCode::Esc => {
                             app.clear_error();
                         }
+                        KeyCode::Char('q') => {
+                            disable_raw_mode()?;
+                            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                            terminal.show_cursor()?;
+                            break;
+                        }
                         _ => {}
                     }
                 }
@@ -426,10 +432,14 @@ fn run(
 
                         KeyCode::Char('p') => {
                             if app.active_view == ActiveView::Models {
-                                // TODO: currently can't catch errors internally due to ownership of app and settings
-                                let (a, s) = set_app_model(app, settings, max_commits, true)?;
+                                let (a, s, result) =
+                                    set_app_model(app, settings, max_commits, true)?;
                                 app = a;
                                 settings = s;
+                                if let Err(err) = result {
+                                    app.set_error(err);
+                                    app.active_view = ActiveView::Graph;
+                                }
                             }
                         }
 
@@ -449,10 +459,14 @@ fn run(
                         KeyCode::Esc => app.on_esc(),
                         KeyCode::Enter => {
                             if app.active_view == ActiveView::Models {
-                                // TODO: currently can't catch errors internally due to ownership of app and settings
-                                let (a, s) = set_app_model(app, settings, max_commits, false)?;
+                                let (a, s, result) =
+                                    set_app_model(app, settings, max_commits, true)?;
                                 app = a;
                                 settings = s;
+                                if let Err(err) = result {
+                                    app.set_error(err);
+                                    app.active_view = ActiveView::Graph;
+                                }
                             } else {
                                 app.on_enter()?
                             }
@@ -491,6 +505,12 @@ fn run(
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             file_dialog.clear_error();
+                        }
+                        KeyCode::Char('q') => {
+                            disable_raw_mode()?;
+                            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                            terminal.show_cursor()?;
+                            break;
                         }
                         _ => {}
                     }
@@ -548,34 +568,55 @@ fn set_app_model(
     mut settings: Settings,
     max_commits: Option<usize>,
     permanent: bool,
-) -> Result<(App, Settings), String> {
+) -> Result<(App, Settings, Result<(), String>), String> {
     if let (Some(state), Some(graph)) = (&app.models_state, &app.graph_state.graph) {
         if let Some(sel) = state.state.selected() {
             let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
             let mut models_dir = app_dir;
             models_dir.push("models");
 
-            let model = &state.models[sel];
+            let model = &state.models[sel][..];
+            let temp_model = model.to_string();
 
-            let the_model = get_model(
+            let the_model = match get_model(
                 &graph.repository,
                 Some(model),
                 REPO_CONFIG_FILE,
                 &models_dir,
-            )
-            .map_err(|err| format!("Unable to load model '{}'.\n{}", model, err))?;
+            ) {
+                Ok(model) => model,
+                Err(err) => {
+                    return Ok((
+                        app,
+                        settings,
+                        Err(format!("Unable to load model '{}'.\n{}", temp_model, err)),
+                    ))
+                }
+            };
 
             if permanent {
-                set_model(&graph.repository, model, REPO_CONFIG_FILE, &models_dir)?;
+                if let Err(err) = set_model(&graph.repository, model, REPO_CONFIG_FILE, &models_dir)
+                {
+                    return Ok((app, settings, Err(err)));
+                }
             }
 
             app.on_esc();
 
-            settings.branches = BranchSettings::from(the_model).map_err(|err| err.to_string())?;
+            settings.branches = match BranchSettings::from(the_model) {
+                Ok(branch_def) => branch_def,
+                Err(err) => {
+                    return Ok((
+                        app,
+                        settings,
+                        Err(format!("Unable to parse model '{}'.\n{}", temp_model, err)),
+                    ))
+                }
+            };
             app = app.reload(&settings, max_commits)?;
         }
     }
-    Ok((app, settings))
+    Ok((app, settings, Ok(())))
 }
 
 /// Permanently sets the branching model for a repository
