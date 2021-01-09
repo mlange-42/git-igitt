@@ -341,7 +341,12 @@ impl App {
             std::mem::swap(&mut temp, &mut self.active_view);
             self.prev_active_view = Some(temp);
 
-            let models = get_available_models(&self.models_path)?;
+            let models = get_available_models(&self.models_path).map_err(|err| {
+                format!(
+                    "Unable to load model files from %APP_DATA%/git-graph/models.\n{}",
+                    err
+                )
+            })?;
             self.models_state = Some(ModelListState::new(models, self.color));
         }
         Ok(())

@@ -397,7 +397,9 @@ fn run(
                             app.show_help();
                         }
                         KeyCode::Char('m') => {
-                            app.select_model()?;
+                            if let Err(err) = app.select_model() {
+                                app.set_error(err);
+                            }
                         }
                         KeyCode::Char('r') => {
                             app = app.reload(&settings, max_commits)?;
@@ -424,6 +426,7 @@ fn run(
 
                         KeyCode::Char('p') => {
                             if app.active_view == ActiveView::Models {
+                                // TODO: currently can't catch errors internally due to ownership of app and settings
                                 let (a, s) = set_app_model(app, settings, max_commits, true)?;
                                 app = a;
                                 settings = s;
@@ -446,6 +449,7 @@ fn run(
                         KeyCode::Esc => app.on_esc(),
                         KeyCode::Enter => {
                             if app.active_view == ActiveView::Models {
+                                // TODO: currently can't catch errors internally due to ownership of app and settings
                                 let (a, s) = set_app_model(app, settings, max_commits, false)?;
                                 app = a;
                                 settings = s;
@@ -558,7 +562,8 @@ fn set_app_model(
                 Some(model),
                 REPO_CONFIG_FILE,
                 &models_dir,
-            )?;
+            )
+            .map_err(|err| format!("Unable to load model '{}'.\n{}", model, err))?;
 
             if permanent {
                 set_model(&graph.repository, model, REPO_CONFIG_FILE, &models_dir)?;
@@ -599,7 +604,13 @@ pub fn set_model<P: AsRef<Path>>(
     };
 
     let str = toml::to_string_pretty(&config).map_err(|err| err.to_string())?;
-    std::fs::write(&config_path, str).map_err(|err| err.to_string())?;
+    std::fs::write(&config_path, str).map_err(|err| {
+        format!(
+            "Can't write repository settings to file {}\n{}",
+            &config_path.display(),
+            err.to_string()
+        )
+    })?;
 
     Ok(())
 }
