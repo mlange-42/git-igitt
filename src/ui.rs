@@ -360,7 +360,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
 fn draw_error_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str, color: bool) {
     let mut block = Block::default()
         .title(" Error - Press Enter to continue ")
-        .borders(Borders::ALL);
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick);
 
     if color {
         block = block.border_style(Style::default().fg(Color::LightRed));
@@ -375,6 +376,9 @@ fn draw_error_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str, co
 /// helper function to create a centered rect using up
 /// certain percentage of the available rect `r`
 fn centered_rect(size_x: u16, size_y: u16, r: Rect) -> Rect {
+    let size_x = std::cmp::min(size_x, r.width);
+    let size_y = std::cmp::min(size_y, r.height);
+
     let popup_layout = Layout::default()
         .direction(Direction::Vertical)
         .constraints(
