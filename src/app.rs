@@ -343,7 +343,7 @@ impl App {
 
             let models = get_available_models(&self.models_path).map_err(|err| {
                 format!(
-                    "Unable to load model files from %APP_DATA%/git-graph/models.\n{}",
+                    "Unable to load model files from %APP_DATA%/git-graph/models\n{}",
                     err
                 )
             })?;
