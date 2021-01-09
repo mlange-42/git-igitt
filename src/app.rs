@@ -88,6 +88,7 @@ pub struct App {
     pub line_numbers: bool,
     pub should_quit: bool,
     pub models_path: PathBuf,
+    pub error_message: Option<String>,
 }
 
 impl App {
@@ -108,6 +109,7 @@ impl App {
             line_numbers: true,
             should_quit: false,
             models_path,
+            error_message: None,
         }
     }
 
@@ -339,7 +341,12 @@ impl App {
             std::mem::swap(&mut temp, &mut self.active_view);
             self.prev_active_view = Some(temp);
 
-            let models = get_available_models(&self.models_path)?;
+            let models = get_available_models(&self.models_path).map_err(|err| {
+                format!(
+                    "Unable to load model files from %APP_DATA%/git-graph/models.\n{}",
+                    err
+                )
+            })?;
             self.models_state = Some(ModelListState::new(models, self.color));
         }
         Ok(())
@@ -515,6 +522,13 @@ impl App {
             }
         }
         Ok(())
+    }
+
+    pub fn set_error(&mut self, msg: String) {
+        self.error_message = Some(msg);
+    }
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
     }
 }
 

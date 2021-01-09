@@ -1,3 +1,4 @@
+use crate::app::App;
 use std::io::Error;
 use std::path::PathBuf;
 use tui::widgets::ListState;
@@ -10,6 +11,7 @@ pub struct FileDialog<'a> {
     pub error_message: Option<String>,
     pub color: bool,
     pub state: ListState,
+    pub previous_app: Option<App>,
 }
 
 impl<'a> FileDialog<'a> {
@@ -22,6 +24,7 @@ impl<'a> FileDialog<'a> {
             error_message: None,
             color,
             state: ListState::default(),
+            previous_app: None,
         })
     }
 
@@ -39,10 +42,6 @@ impl<'a> FileDialog<'a> {
             None => 0,
         };
         self.state.select(Some(i));
-    }
-
-    pub fn dismiss_error(&mut self) {
-        self.error_message = None;
     }
 
     pub fn on_up(&mut self, is_shift: bool) {
@@ -141,5 +140,12 @@ impl<'a> FileDialog<'a> {
             self.state.select(Some(0));
         }
         Ok(())
+    }
+
+    pub fn set_error(&mut self, msg: String) {
+        self.error_message = Some(msg);
+    }
+    pub fn clear_error(&mut self) {
+        self.error_message = None;
     }
 }
