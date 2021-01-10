@@ -15,6 +15,7 @@ use git_graph::{
         Settings,
     },
 };
+use git_igitt::app::DiffMode;
 use git_igitt::{
     app::{ActiveView, App, CurrentBranches},
     dialogs::FileDialog,
@@ -420,19 +421,29 @@ fn run(
                         KeyCode::Char('b') => {
                             app.toggle_branches();
                         }
-                        KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                            if let Some(graph) = &app.graph_state.graph {
-                                let path = graph.repository.path();
-                                let path = path.parent().unwrap_or(path);
-                                file_dialog.location = PathBuf::from(path.parent().unwrap_or(path));
-                                file_dialog.selection = Some(PathBuf::from(path));
+                        KeyCode::Char('o') => {
+                            if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                if let Some(graph) = &app.graph_state.graph {
+                                    let path = graph.repository.path();
+                                    let path = path.parent().unwrap_or(path);
+                                    file_dialog.location =
+                                        PathBuf::from(path.parent().unwrap_or(path));
+                                    file_dialog.selection = Some(PathBuf::from(path));
+                                } else {
+                                    file_dialog.location = std::env::current_dir()?;
+                                    file_dialog.selection = None
+                                }
+                                open_file = true;
                             } else {
-                                file_dialog.location = std::env::current_dir()?;
-                                file_dialog.selection = None
+                                app.set_diff_mode(DiffMode::Old)?;
                             }
-                            open_file = true;
                         }
-
+                        KeyCode::Char('n') => {
+                            app.set_diff_mode(DiffMode::New)?;
+                        }
+                        KeyCode::Char('d') => {
+                            app.set_diff_mode(DiffMode::Diff)?;
+                        }
                         KeyCode::Char('p') => {
                             if app.active_view == ActiveView::Models {
                                 let (a, s, result) =
@@ -445,6 +456,8 @@ fn run(
                                 }
                             }
                         }
+                        KeyCode::Char('+') => app.on_plus()?,
+                        KeyCode::Char('-') => app.on_minus()?,
 
                         KeyCode::Up => app.on_up(
                             event.modifiers.contains(KeyModifiers::SHIFT),
@@ -465,7 +478,7 @@ fn run(
                             event.modifiers.contains(KeyModifiers::CONTROL),
                         ),
                         KeyCode::Tab => app.on_tab(),
-                        KeyCode::Esc => app.on_esc(),
+                        KeyCode::Esc => app.on_esc()?,
                         KeyCode::Enter => {
                             if app.active_view == ActiveView::Models {
                                 let (a, s, result) =
@@ -615,7 +628,7 @@ fn set_app_model(
                 }
             }
 
-            app.on_esc();
+            app.on_esc()?;
 
             settings.branches = match BranchSettings::from(the_model) {
                 Ok(branch_def) => branch_def,
