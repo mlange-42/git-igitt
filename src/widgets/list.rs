@@ -5,6 +5,7 @@ use tui::text::Text;
 pub struct ListState {
     pub offset: usize,
     pub selected: Option<usize>,
+    pub scroll_x: u16,
 }
 
 impl Default for ListState {
@@ -12,6 +13,7 @@ impl Default for ListState {
         ListState {
             offset: 0,
             selected: None,
+            scroll_x: 0,
         }
     }
 }

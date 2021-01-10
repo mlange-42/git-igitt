@@ -456,8 +456,14 @@ fn run(
                         )?,
                         KeyCode::Home => app.on_home()?,
                         KeyCode::End => app.on_end()?,
-                        KeyCode::Left => app.on_left(),
-                        KeyCode::Right => app.on_right(),
+                        KeyCode::Left => app.on_left(
+                            event.modifiers.contains(KeyModifiers::SHIFT),
+                            event.modifiers.contains(KeyModifiers::CONTROL),
+                        ),
+                        KeyCode::Right => app.on_right(
+                            event.modifiers.contains(KeyModifiers::SHIFT),
+                            event.modifiers.contains(KeyModifiers::CONTROL),
+                        ),
                         KeyCode::Tab => app.on_tab(),
                         KeyCode::Esc => app.on_esc(),
                         KeyCode::Enter => {
