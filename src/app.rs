@@ -203,6 +203,9 @@ impl App {
             ActiveView::Graph => {
                 if is_ctrl {
                     if self.graph_state.move_secondary_selection(step, false) {
+                        if self.graph_state.secondary_selected == self.graph_state.selected {
+                            self.graph_state.secondary_selected = None;
+                        }
                         self.selection_changed()?;
                     }
                 } else if self.graph_state.move_selection(step, false) {
@@ -251,6 +254,9 @@ impl App {
             ActiveView::Graph => {
                 if is_ctrl {
                     if self.graph_state.move_secondary_selection(step, true) {
+                        if self.graph_state.secondary_selected == self.graph_state.selected {
+                            self.graph_state.secondary_selected = None;
+                        }
                         self.selection_changed()?;
                     }
                 } else if self.graph_state.move_selection(step, true) {
