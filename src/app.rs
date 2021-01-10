@@ -4,12 +4,12 @@ use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
 use crate::widgets::graph_view::GraphViewState;
 use crate::widgets::list::StatefulList;
 use crate::widgets::models_view::ModelListState;
-use git2::{DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions, Oid};
+use git2::{Commit, DiffDelta, DiffFormat, DiffHunk, DiffLine, DiffOptions as GDiffOptions, Oid};
 use git_graph::config::get_available_models;
 use git_graph::graph::GitGraph;
 use git_graph::print::unicode::{format_branches, print_unicode};
 use git_graph::settings::Settings;
-use std::fmt::{Error, Write};
+use std::fmt::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 use tui::style::Color;
@@ -32,6 +32,27 @@ pub enum DiffType {
     Deleted,
     Modified,
     Renamed,
+}
+
+#[derive(PartialEq)]
+pub enum DiffMode {
+    Diff,
+    Old,
+    New,
+}
+
+pub struct DiffOptions {
+    pub context_lines: u32,
+    pub diff_mode: DiffMode,
+}
+
+impl Default for DiffOptions {
+    fn default() -> Self {
+        Self {
+            context_lines: 3,
+            diff_mode: DiffMode::Diff,
+        }
+    }
 }
 
 impl FromStr for DiffType {
@@ -73,6 +94,7 @@ impl DiffType {
 }
 
 pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
+pub type DiffLines = Vec<(String, Option<u32>, Option<u32>)>;
 
 pub struct App {
     pub graph_state: GraphViewState,
@@ -92,6 +114,7 @@ pub struct App {
     pub should_quit: bool,
     pub models_path: PathBuf,
     pub error_message: Option<String>,
+    pub diff_options: DiffOptions,
 }
 
 impl App {
@@ -114,6 +137,7 @@ impl App {
             should_quit: false,
             models_path,
             error_message: None,
+            diff_options: DiffOptions::default(),
         }
     }
 
@@ -414,11 +438,27 @@ impl App {
         Ok(())
     }
 
+    pub fn on_plus(&mut self) -> Result<(), String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.context_lines = self.diff_options.context_lines.saturating_add(1);
+            self.file_changed()?;
+        }
+        Ok(())
+    }
+
+    pub fn on_minus(&mut self) -> Result<(), String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.context_lines = self.diff_options.context_lines.saturating_sub(1);
+            self.file_changed()?;
+        }
+        Ok(())
+    }
+
     pub fn on_tab(&mut self) {
         self.is_fullscreen = !self.is_fullscreen;
     }
 
-    pub fn on_esc(&mut self) {
+    pub fn on_esc(&mut self) -> Result<(), String> {
         if let ActiveView::Help(_) = self.active_view {
             self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
         } else if let ActiveView::Models = self.active_view {
@@ -429,7 +469,18 @@ impl App {
             if let Some(content) = &mut self.commit_state.content {
                 content.diffs.state.scroll_x = 0;
             }
+            self.diff_options.diff_mode = DiffMode::Diff;
+            self.file_changed()?;
         }
+        Ok(())
+    }
+
+    pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.diff_mode = mode;
+            self.file_changed()?;
+        }
+        Ok(())
     }
 
     pub fn toggle_layout(&mut self) {
@@ -511,43 +562,7 @@ impl App {
                     };
                     let comp_oid = compare_to.as_ref().map(|c| c.id());
 
-                    let mut diffs = vec![];
-                    let diff = graph
-                        .repository
-                        .diff_tree_to_tree(
-                            compare_to
-                                .map(|c| c.tree())
-                                .map_or(Ok(None), |v| v.map(Some))
-                                .map_err(|err| err.message().to_string())?
-                                .as_ref(),
-                            Some(&commit.tree().map_err(|err| err.message().to_string())?),
-                            None,
-                        )
-                        .map_err(|err| err.message().to_string())?;
-
-                    let mut diff_err = Ok(());
-                    diff.print(DiffFormat::NameStatus, |d, _h, l| {
-                        let content = std::str::from_utf8(l.content()).unwrap();
-                        let tp = match DiffType::from_str(&content[..1]) {
-                            Ok(tp) => tp,
-                            Err(err) => {
-                                diff_err = Err(err);
-                                return false;
-                            }
-                        };
-                        let f = match tp {
-                            DiffType::Deleted | DiffType::Modified => d.old_file(),
-                            DiffType::Added | DiffType::Renamed => d.new_file(),
-                        };
-                        diffs.push(DiffItem {
-                            file: f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
-                            diff_type: tp,
-                        });
-                        true
-                    })
-                    .map_err(|err| err.message().to_string())?;
-
-                    diff_err?;
+                    let diffs = get_diff_files(&graph, compare_to.as_ref(), &commit)?;
 
                     Some(CommitViewInfo::new(
                         message_fmt,
@@ -600,37 +615,13 @@ impl App {
 
                 let selection = &state.diffs.items[sel_index];
 
-                let mut opts = DiffOptions::new();
-                opts.pathspec(&selection.file);
-                opts.disable_pathspec_match(true);
-                let diff = graph
-                    .repository
-                    .diff_tree_to_tree(
-                        compare_to
-                            .map(|c| c.tree())
-                            .map_or(Ok(None), |v| v.map(Some))
-                            .map_err(|err| err.message().to_string())?
-                            .as_ref(),
-                        Some(&commit.tree().map_err(|err| err.message().to_string())?),
-                        Some(&mut opts),
-                    )
-                    .map_err(|err| err.message().to_string())?;
-
-                let mut diff_error = Ok(());
-                let mut diffs = vec![];
-
-                diff.print(DiffFormat::Patch, |d, h, l| {
-                    match print_diff_line(&d, &h, &l) {
-                        Ok(line) => diffs.push((line, l.old_lineno(), l.new_lineno())),
-                        Err(err) => {
-                            diff_error = Err(err.to_string());
-                            return false;
-                        }
-                    }
-                    true
-                })
-                .map_err(|err| err.message().to_string())?;
-                diff_error?;
+                let diffs = get_file_diffs(
+                    &graph,
+                    compare_to.as_ref(),
+                    &commit,
+                    &selection.file,
+                    &self.diff_options,
+                )?;
 
                 Some(DiffViewInfo::new(
                     diffs,
@@ -652,17 +643,173 @@ impl App {
     }
 }
 
+fn get_diff_files(
+    graph: &GitGraph,
+    old: Option<&Commit>,
+    new: &Commit,
+) -> Result<Vec<DiffItem>, String> {
+    let mut diffs = vec![];
+    let diff = graph
+        .repository
+        .diff_tree_to_tree(
+            old.map(|c| c.tree())
+                .map_or(Ok(None), |v| v.map(Some))
+                .map_err(|err| err.message().to_string())?
+                .as_ref(),
+            Some(&new.tree().map_err(|err| err.message().to_string())?),
+            None,
+        )
+        .map_err(|err| err.message().to_string())?;
+
+    let mut diff_err = Ok(());
+    diff.print(DiffFormat::NameStatus, |d, _h, l| {
+        let content = std::str::from_utf8(l.content()).unwrap();
+        let tp = match DiffType::from_str(&content[..1]) {
+            Ok(tp) => tp,
+            Err(err) => {
+                diff_err = Err(err);
+                return false;
+            }
+        };
+        let f = match tp {
+            DiffType::Deleted | DiffType::Modified => d.old_file(),
+            DiffType::Added | DiffType::Renamed => d.new_file(),
+        };
+        diffs.push(DiffItem {
+            file: f.path().and_then(|p| p.to_str()).unwrap_or("").to_string(),
+            diff_type: tp,
+        });
+        true
+    })
+    .map_err(|err| err.message().to_string())?;
+
+    diff_err?;
+
+    Ok(diffs)
+}
+
+fn get_file_diffs(
+    graph: &GitGraph,
+    old: Option<&Commit>,
+    new: &Commit,
+    path: &str,
+    options: &DiffOptions,
+) -> Result<DiffLines, String> {
+    let mut diffs = vec![];
+    let mut opts = GDiffOptions::new();
+    opts.context_lines(options.context_lines);
+    opts.pathspec(path);
+    opts.disable_pathspec_match(true);
+    let diff = graph
+        .repository
+        .diff_tree_to_tree(
+            old.map(|c| c.tree())
+                .map_or(Ok(None), |v| v.map(Some))
+                .map_err(|err| err.message().to_string())?
+                .as_ref(),
+            Some(&new.tree().map_err(|err| err.message().to_string())?),
+            Some(&mut opts),
+        )
+        .map_err(|err| err.message().to_string())?;
+
+    let mut diff_error = Ok(());
+
+    if options.diff_mode == DiffMode::Diff {
+        diff.print(DiffFormat::Patch, |d, h, l| {
+            match print_diff_line(&d, &h, &l) {
+                Ok(line) => diffs.push((line, l.old_lineno(), l.new_lineno())),
+                Err(err) => {
+                    diff_error = Err(err);
+                    return false;
+                }
+            }
+            true
+        })
+        .map_err(|err| err.message().to_string())?;
+    } else {
+        match diff.print(DiffFormat::PatchHeader, |d, _h, l| {
+            let (blob_oid, oid) = if options.diff_mode == DiffMode::New {
+                (d.new_file().id(), new.id())
+            } else {
+                (
+                    d.old_file().id(),
+                    old.map(|c| c.id()).unwrap_or_else(Oid::zero),
+                )
+            };
+
+            let line = match std::str::from_utf8(l.content()) {
+                Ok(text) => text,
+                Err(err) => {
+                    diff_error = Err(err.to_string());
+                    return false;
+                }
+            }
+            .to_string();
+            diffs.push((line, None, None));
+
+            if blob_oid.is_zero() {
+                diffs.push((
+                    format!("File does not exist in {}", &oid.to_string()[..7]),
+                    None,
+                    None,
+                ))
+            } else {
+                let blob = match graph.repository.find_blob(blob_oid) {
+                    Ok(blob) => blob,
+                    Err(err) => {
+                        diff_error = Err(err.to_string());
+                        return false;
+                    }
+                };
+
+                let text = match std::str::from_utf8(blob.content()).map_err(|err| err.to_string())
+                {
+                    Ok(text) => text,
+                    Err(err) => {
+                        diff_error = Err(err);
+                        return false;
+                    }
+                };
+                diffs.push((text.to_string(), None, None));
+            }
+            true
+        }) {
+            Ok(_) => {}
+            Err(_) => {
+                let oid = if options.diff_mode == DiffMode::New {
+                    new.id()
+                } else {
+                    old.map(|c| c.id()).unwrap_or_else(Oid::zero)
+                };
+                diffs.push((
+                    format!("File does not exist in {}", &oid.to_string()[..7]),
+                    None,
+                    None,
+                ))
+            }
+        };
+        //.map_err(|err| err.message().to_string())?;
+    }
+    diff_error?;
+    Ok(diffs)
+}
+
 fn print_diff_line(
     _delta: &DiffDelta,
     _hunk: &Option<DiffHunk>,
     line: &DiffLine,
-) -> Result<String, Error> {
+) -> Result<String, String> {
     let mut out = String::new();
     match line.origin() {
-        '+' | '-' | ' ' => write!(out, "{}", line.origin())?,
+        '+' | '-' | ' ' => write!(out, "{}", line.origin()).map_err(|err| err.to_string())?,
         _ => {}
     }
-    write!(out, "{}", std::str::from_utf8(line.content()).unwrap())?;
+    write!(
+        out,
+        "{}",
+        std::str::from_utf8(line.content()).map_err(|err| err.to_string())?
+    )
+    .map_err(|err| err.to_string())?;
     Ok(out)
 }
 

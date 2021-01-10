@@ -1,4 +1,4 @@
-use crate::app::{ActiveView, App};
+use crate::app::{ActiveView, App, DiffMode};
 use crate::dialogs::FileDialog;
 use crate::widgets::branches_view::{BranchList, BranchListItem};
 use crate::widgets::commit_view::CommitView;
@@ -251,11 +251,16 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
 fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if let Some(state) = &app.diff_state.content {
-        let mut block = Block::default().borders(Borders::ALL).title(format!(
-            " Diff ({}..{}) ",
-            &state.compare_oid.to_string()[..7],
-            &state.oid.to_string()[..7]
-        ));
+        let title = match app.diff_options.diff_mode {
+            DiffMode::Diff => format!(
+                " Diff ({}..{}) ",
+                &state.compare_oid.to_string()[..7],
+                &state.oid.to_string()[..7]
+            ),
+            DiffMode::Old => format!(" Diff (old: {}) ", &state.compare_oid.to_string()[..7],),
+            DiffMode::New => format!(" Diff (new: {}) ", &state.oid.to_string()[..7],),
+        };
+        let mut block = Block::default().borders(Borders::ALL).title(title);
         if app.active_view == ActiveView::Diff {
             block = block.border_type(BorderType::Thick);
         }
@@ -412,6 +417,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          Backspace          Clear secondary selection\n\
          Ctrl + Left/Right  Scroll horizontal\n\
          Enter              Jump to selected branch/tag\n\
+         \n\
+         +/-                Increase/decrease number of diff context lines
          \n\
          Left/Right         Change panel\n\
          Tab                Panel to fullscreen\n\
