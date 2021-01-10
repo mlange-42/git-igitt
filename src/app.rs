@@ -206,7 +206,10 @@ impl App {
             }
             ActiveView::Diff => {
                 if let Some(content) = &mut self.diff_state.content {
-                    content.scroll = content.scroll.saturating_sub(step as u16);
+                    content.scroll = (
+                        content.scroll.0.saturating_sub(step as u16),
+                        content.scroll.1,
+                    );
                 }
             }
             ActiveView::Models => {
@@ -251,7 +254,10 @@ impl App {
             }
             ActiveView::Diff => {
                 if let Some(content) = &mut self.diff_state.content {
-                    content.scroll = content.scroll.saturating_add(step as u16);
+                    content.scroll = (
+                        content.scroll.0.saturating_add(step as u16),
+                        content.scroll.1,
+                    );
                 }
             }
             ActiveView::Models => {
@@ -282,26 +288,69 @@ impl App {
         }
         Ok(())
     }
-    pub fn on_right(&mut self) {
-        self.active_view = match &self.active_view {
-            ActiveView::Branches => ActiveView::Graph,
-            ActiveView::Graph => ActiveView::Commit,
-            ActiveView::Commit => ActiveView::Files,
-            ActiveView::Files => ActiveView::Diff,
-            ActiveView::Diff => ActiveView::Diff,
-            ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
-            ActiveView::Models => ActiveView::Models,
+
+    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) {
+        if is_ctrl {
+            let step = if is_shift { 15 } else { 3 };
+            match self.active_view {
+                ActiveView::Diff => {
+                    if let Some(content) = &mut self.diff_state.content {
+                        content.scroll = (
+                            content.scroll.0,
+                            content.scroll.1.saturating_add(step as u16),
+                        );
+                    }
+                }
+                ActiveView::Files => {
+                    if let Some(content) = &mut self.commit_state.content {
+                        content.diffs.state.scroll_x =
+                            content.diffs.state.scroll_x.saturating_add(step as u16);
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            self.active_view = match &self.active_view {
+                ActiveView::Branches => ActiveView::Graph,
+                ActiveView::Graph => ActiveView::Commit,
+                ActiveView::Commit => ActiveView::Files,
+                ActiveView::Files => ActiveView::Diff,
+                ActiveView::Diff => ActiveView::Diff,
+                ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+                ActiveView::Models => ActiveView::Models,
+            }
         }
     }
-    pub fn on_left(&mut self) {
-        self.active_view = match &self.active_view {
-            ActiveView::Branches => ActiveView::Branches,
-            ActiveView::Graph => ActiveView::Branches,
-            ActiveView::Commit => ActiveView::Graph,
-            ActiveView::Files => ActiveView::Commit,
-            ActiveView::Diff => ActiveView::Files,
-            ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
-            ActiveView::Models => ActiveView::Models,
+    pub fn on_left(&mut self, is_shift: bool, is_ctrl: bool) {
+        if is_ctrl {
+            let step = if is_shift { 15 } else { 3 };
+            match self.active_view {
+                ActiveView::Diff => {
+                    if let Some(content) = &mut self.diff_state.content {
+                        content.scroll = (
+                            content.scroll.0,
+                            content.scroll.1.saturating_sub(step as u16),
+                        );
+                    }
+                }
+                ActiveView::Files => {
+                    if let Some(content) = &mut self.commit_state.content {
+                        content.diffs.state.scroll_x =
+                            content.diffs.state.scroll_x.saturating_sub(step as u16);
+                    }
+                }
+                _ => {}
+            }
+        } else {
+            self.active_view = match &self.active_view {
+                ActiveView::Branches => ActiveView::Branches,
+                ActiveView::Graph => ActiveView::Branches,
+                ActiveView::Commit => ActiveView::Graph,
+                ActiveView::Files => ActiveView::Commit,
+                ActiveView::Diff => ActiveView::Files,
+                ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
+                ActiveView::Models => ActiveView::Models,
+            }
         }
     }
 

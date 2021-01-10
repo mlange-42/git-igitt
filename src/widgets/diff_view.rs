@@ -14,7 +14,7 @@ pub struct DiffViewInfo {
     pub diffs: Vec<(String, Option<u32>, Option<u32>)>,
     pub oid: Oid,
     pub compare_oid: Oid,
-    pub scroll: u16,
+    pub scroll: (u16, u16),
 }
 impl DiffViewInfo {
     pub fn new(diffs: Vec<(String, Option<u32>, Option<u32>)>, oid: Oid, compare_oid: Oid) -> Self {
@@ -22,7 +22,7 @@ impl DiffViewInfo {
             diffs,
             oid,
             compare_oid,
-            scroll: 0,
+            scroll: (0, 0),
         }
     }
 }

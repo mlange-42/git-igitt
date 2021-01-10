@@ -2,14 +2,13 @@ use crate::app::{ActiveView, App};
 use crate::dialogs::FileDialog;
 use crate::widgets::branches_view::{BranchList, BranchListItem};
 use crate::widgets::commit_view::CommitView;
-use crate::widgets::files_view::FileList;
+use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
-use crate::widgets::list::DefaultListItem;
 use crate::widgets::models_view::ModelListState;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::text::Text;
+use tui::text::{Span, Text};
 use tui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem as TuiListItem, Paragraph, Wrap,
 };
@@ -219,14 +218,18 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             .items
             .iter()
             .map(|item| {
-                DefaultListItem::new(if color {
-                    Text::styled(
-                        format!("{} {}", item.diff_type.to_string(), item.file),
-                        Style::default().fg(item.diff_type.to_color()),
+                if color {
+                    let style = Style::default().fg(item.diff_type.to_color());
+                    FileListItem::new(
+                        Span::styled(&item.file, style),
+                        Span::styled(format!("{} ", item.diff_type.to_string()), style),
                     )
                 } else {
-                    Text::raw(format!("{} {}", item.diff_type.to_string(), item.file))
-                })
+                    FileListItem::new(
+                        Span::raw(&item.file),
+                        Span::raw(format!("{} ", item.diff_type.to_string())),
+                    )
+                }
             })
             .collect();
 
@@ -256,8 +259,6 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
         if app.active_view == ActiveView::Diff {
             block = block.border_type(BorderType::Thick);
         }
-
-        let scroll = state.scroll;
 
         let styles = [
             Style::default().fg(Color::LightGreen),
@@ -328,7 +329,7 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             }
         }
 
-        let paragraph = Paragraph::new(text).block(block).scroll((scroll, 0));
+        let paragraph = Paragraph::new(text).block(block).scroll(state.scroll);
 
         f.render_widget(paragraph, target);
     } else {
@@ -399,26 +400,27 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let block = Block::default().borders(Borders::ALL).title(" Help ");
 
     let paragraph = Paragraph::new(
-        "F1/H             Show this help\n\
-         Q                Quit\n\
-         Ctrl + O         Open repository\n\
-         M                Set branching model\n\
+        "F1/H               Show this help\n\
+         Q                  Quit\n\
+         Ctrl + O           Open repository\n\
+         M                  Set branching model\n\
          \n\
-         Up/Down          Select / navigate / scroll\n\
-         Shift + Up/Down  Navigate fast\n\
-         Home/End         Navigate to first/last\n\
-         Ctrl + Up/Down   Secondary selection (compare arbitrary commits)\n\
-         Backspace        Clear secondary selection\n\
-         Enter            Jump to selected branch/tag\n\
+         Up/Down            Select / navigate / scroll\n\
+         Shift + Up/Down    Navigate fast\n\
+         Home/End           Navigate to first/last\n\
+         Ctrl + Up/Down     Secondary selection (compare arbitrary commits)\n\
+         Backspace          Clear secondary selection\n\
+         Ctrl + Left/Right  Scroll horizontal\n\
+         Enter              Jump to selected branch/tag\n\
          \n\
-         Left/Right       Change panel\n\
-         Tab              Panel to fullscreen\n\
-         Ecs              Return to default view\n\
-         L                Toggle horizontal/vertical layout\n\
-         B                Toggle show branch list\n\
-         Ctrl + L         Toggle line numbers in diff\n\
+         Left/Right         Change panel\n\
+         Tab                Panel to fullscreen\n\
+         Ecs                Return to default view\n\
+         L                  Toggle horizontal/vertical layout\n\
+         B                  Toggle show branch list\n\
+         Ctrl + L           Toggle line numbers in diff\n\
          \n\
-         R                Reload repository graph",
+         R                  Reload repository graph",
     )
     .block(block)
     .scroll((scroll, 0));

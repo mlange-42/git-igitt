@@ -1,14 +1,44 @@
-use crate::widgets::list::{DefaultListItem, ListState};
+use crate::widgets::list::ListState;
 use tui::buffer::Buffer;
 use tui::layout::{Corner, Rect};
 use tui::style::Style;
+use tui::text::Span;
 use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FileListItem<'a> {
+    pub content: Span<'a>,
+    pub prefix: Span<'a>,
+    pub style: Style,
+}
+
+impl<'a> FileListItem<'a> {
+    pub fn new<T>(content: T, prefix: T) -> FileListItem<'a>
+    where
+        T: Into<Span<'a>>,
+    {
+        FileListItem {
+            content: content.into(),
+            prefix: prefix.into(),
+            style: Style::default(),
+        }
+    }
+
+    pub fn style(mut self, style: Style) -> FileListItem<'a> {
+        self.style = style;
+        self
+    }
+
+    pub fn height(&self) -> usize {
+        1
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct FileList<'a> {
     block: Option<Block<'a>>,
-    items: Vec<DefaultListItem<'a>>,
+    items: Vec<FileListItem<'a>>,
     /// Style used as a base style for the widget
     style: Style,
     start_corner: Corner,
@@ -21,7 +51,7 @@ pub struct FileList<'a> {
 impl<'a> FileList<'a> {
     pub fn new<T>(items: T) -> FileList<'a>
     where
-        T: Into<Vec<DefaultListItem<'a>>>,
+        T: Into<Vec<FileListItem<'a>>>,
     {
         FileList {
             block: None,
@@ -156,8 +186,28 @@ impl<'a> StatefulWidget for FileList<'a> {
                 x
             };
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
-            for (j, line) in item.content.lines.iter().enumerate() {
-                buf.set_spans(elem_x, y + j as u16, line, max_element_width as u16);
+            let max_width_2 = max_element_width.saturating_sub(item.prefix.width());
+            buf.set_span(elem_x, y as u16, &item.prefix, max_element_width as u16);
+            if state.scroll_x > 0 {
+                let start =
+                    std::cmp::min(item.content.content.width(), state.scroll_x as usize + 2);
+                let span = Span::styled(
+                    format!("..{}", &item.content.content[start..]),
+                    item.content.style,
+                );
+                buf.set_span(
+                    elem_x + item.prefix.width() as u16,
+                    y as u16,
+                    &span,
+                    max_width_2 as u16,
+                );
+            } else {
+                buf.set_span(
+                    elem_x + item.prefix.width() as u16,
+                    y as u16,
+                    &item.content,
+                    max_width_2 as u16,
+                );
             }
             if is_selected {
                 buf.set_style(area, self.highlight_style);
