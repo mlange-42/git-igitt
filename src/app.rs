@@ -606,7 +606,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
     let mut branches = Vec::new();
 
     branches.push(BranchItem::new(
-        "BRANCHES".to_string(),
+        "Branches".to_string(),
         None,
         7,
         BranchItemType::Heading,
@@ -624,7 +624,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
     }
 
     branches.push(BranchItem::new(
-        "REMOTES".to_string(),
+        "Remotes".to_string(),
         None,
         7,
         BranchItemType::Heading,
@@ -642,7 +642,7 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
     }
 
     branches.push(BranchItem::new(
-        "TAGS".to_string(),
+        "Tags".to_string(),
         None,
         7,
         BranchItemType::Heading,

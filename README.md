@@ -40,8 +40,6 @@ cargo install --git https://github.com/mlange-42/git-igitt
 
 ## Usage
 
-**For detailed information, see the [git-graph manual](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md).**
-
 For basic usage, run the following command:
 
 ```
@@ -58,13 +56,15 @@ If git-igitt is started inside a Git repository's folder, this repository will b
 
 **Branching models**
 
-Run git-graph with a specific model, e.g. `simple`:
+By default, git-igitt assumes the `git-graph` branching model. To change the branching model in the application, press `M`. You can then set the model for the current session with `Enter`, or permanently for the repository with `P`. 
+
+Alternatively, start git-graph with a specific model, e.g. `simple`:
 
 ```
 git-igitt --model simple
 ```
 
-Alternatively, set the model for the repository in the current path permanently:
+Or set the model for the repository in the current path permanently:
 
 ```
 git-igitt model simple
@@ -72,7 +72,7 @@ git-igitt model simple
 
 **Get help**
 
-To view key bindings and help in the application, simply press `H` or `F1`. 
+To view key bindings and help in the application, press `H` or `F1`. 
 
 For the full CLI help describing all options, use:
 
@@ -81,7 +81,7 @@ git-igitt -h
 git-igitt --help
 ```
 
-For **styles** and commit **formatting**, see the [git-graph manual](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md).
+For details on **branching models**, **styles** and commit **formatting**, see the [git-graph manual](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md).
 
 ## Custom branching models
 
@@ -91,14 +91,14 @@ Branching models are configured using the files in `APP_DATA/git-graph/models` (
 * Linux: `~/.config/git-graph`
 * OSX: `~/Library/Application Support/git-graph`
 
-File names of any `.toml` files in the `models` directory can be used in parameter `--model`, or via sub-command `model`. E.g., to use a branching model defined in `my-model.toml`, use:
+File names of any `.toml` files in the `models` directory can be selected in the application or used with parameter `--model`, or via sub-command `model`. E.g., to start with a branching model defined in `my-model.toml`, use:
 
 ```
 git-igitt --model my-model
 ```
 
-**For details on how to create your own branching models see the manual, section 
-[Custom branching models](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md#custom-branching-models) of the git-graph manual.**
+For details on **how to create your own branching models** see section 
+[Custom branching models](https://github.com/mlange-42/git-graph/blob/master/docs/manual.md#custom-branching-models) of the git-graph manual.
 
 ## Limitations
 
@@ -106,7 +106,6 @@ git-igitt --model my-model
 * Currently, the history can only be browsed. So far, no Git commands are implemented.
 * Supports only the primary remote repository `origin`.
 * Does currently not support "octopus merges" (i.e. no more than 2 parents)
-* On Windows PowerShell, piping to file output does not work properly (changes encoding), so you may want to use the default Windows console instead
 
 ## Contributing
 
