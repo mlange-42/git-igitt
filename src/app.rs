@@ -307,6 +307,12 @@ impl App {
                             content.diffs.state.scroll_x.saturating_add(step as u16);
                     }
                 }
+                ActiveView::Branches => {
+                    if let Some(branches) = &mut self.graph_state.branches {
+                        branches.state.scroll_x =
+                            branches.state.scroll_x.saturating_add(step as u16);
+                    }
+                }
                 _ => {}
             }
         } else {
@@ -337,6 +343,12 @@ impl App {
                     if let Some(content) = &mut self.commit_state.content {
                         content.diffs.state.scroll_x =
                             content.diffs.state.scroll_x.saturating_sub(step as u16);
+                    }
+                }
+                ActiveView::Branches => {
+                    if let Some(branches) = &mut self.graph_state.branches {
+                        branches.state.scroll_x =
+                            branches.state.scroll_x.saturating_sub(step as u16);
                     }
                 }
                 _ => {}

@@ -2,7 +2,7 @@ use crate::widgets::list::{ListItem, ListState};
 use tui::buffer::Buffer;
 use tui::layout::{Corner, Rect};
 use tui::style::Style;
-use tui::text::Text;
+use tui::text::Span;
 use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
@@ -22,7 +22,7 @@ impl BranchItemType {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct BranchListItem<'a> {
-    pub content: Text<'a>,
+    pub content: Span<'a>,
     pub style: Style,
     pub item_type: &'a BranchItemType,
 }
@@ -30,7 +30,7 @@ pub struct BranchListItem<'a> {
 impl<'a> BranchListItem<'a> {
     pub fn new<T>(content: T, item_type: &'a BranchItemType) -> BranchListItem<'a>
     where
-        T: Into<Text<'a>>,
+        T: Into<Span<'a>>,
     {
         BranchListItem {
             content: content.into(),
@@ -45,7 +45,7 @@ impl<'a> BranchListItem<'a> {
     }
 
     pub fn height(&self) -> usize {
-        self.content.height()
+        1
     }
 }
 
@@ -190,6 +190,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
             .take(highlight_symbol.width())
             .collect::<String>();
 
+        let mut max_scroll = 0;
         let mut current_height = 0;
         for (i, item) in self
             .items
@@ -232,12 +233,34 @@ impl<'a> StatefulWidget for BranchList<'a> {
             };
 
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
-            for (j, line) in item.content.lines.iter().enumerate() {
-                buf.set_spans(elem_x, y + j as u16, line, max_element_width as u16);
+
+            if state.scroll_x > 0 && item.content.content.width() > max_element_width {
+                if item.content.content.width() - max_element_width > max_scroll {
+                    max_scroll = item.content.content.width() - max_element_width;
+                }
+
+                let start = std::cmp::min(
+                    item.content
+                        .content
+                        .width()
+                        .saturating_sub(max_element_width)
+                        + 2,
+                    std::cmp::min(item.content.content.width(), state.scroll_x as usize + 2),
+                );
+                let span = Span::styled(
+                    format!("..{}", &item.content.content[start..]),
+                    item.content.style,
+                );
+                buf.set_span(elem_x, y as u16, &span, max_element_width as u16);
+            } else {
+                buf.set_span(elem_x, y as u16, &item.content, max_element_width as u16);
             }
             if is_selected {
                 buf.set_style(area, self.highlight_style);
             }
+        }
+        if state.scroll_x > max_scroll as u16 {
+            state.scroll_x = max_scroll as u16;
         }
     }
 }

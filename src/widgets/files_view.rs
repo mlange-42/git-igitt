@@ -147,6 +147,7 @@ impl<'a> StatefulWidget for FileList<'a> {
             .take(highlight_symbol.width())
             .collect::<String>();
 
+        let mut max_scroll = 0;
         let mut current_height = 0;
         for (i, item) in self
             .items
@@ -185,11 +186,16 @@ impl<'a> StatefulWidget for FileList<'a> {
                 let (x, _) = buf.set_stringn(x, y, symbol, list_area.width as usize, item_style);
                 x
             };
+
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
             let max_width_2 = max_element_width.saturating_sub(item.prefix.width());
 
             buf.set_span(elem_x, y as u16, &item.prefix, max_element_width as u16);
             if state.scroll_x > 0 && item.content.content.width() > max_width_2 {
+                if item.content.content.width() - max_width_2 > max_scroll {
+                    max_scroll = item.content.content.width() - max_width_2;
+                }
+
                 let start = std::cmp::min(
                     item.content.content.width().saturating_sub(max_width_2) + 2,
                     std::cmp::min(item.content.content.width(), state.scroll_x as usize + 2),
@@ -215,6 +221,9 @@ impl<'a> StatefulWidget for FileList<'a> {
             if is_selected {
                 buf.set_style(area, self.highlight_style);
             }
+        }
+        if state.scroll_x > max_scroll as u16 {
+            state.scroll_x = max_scroll as u16;
         }
     }
 }

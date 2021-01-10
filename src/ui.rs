@@ -165,9 +165,9 @@ fn draw_branches<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             .map(|item| {
                 BranchListItem::new(
                     if color {
-                        Text::styled(&item.name, Style::default().fg(Color::Indexed(item.color)))
+                        Span::styled(&item.name, Style::default().fg(Color::Indexed(item.color)))
                     } else {
-                        Text::raw(&item.name)
+                        Span::raw(&item.name)
                     },
                     &item.branch_type,
                 )
