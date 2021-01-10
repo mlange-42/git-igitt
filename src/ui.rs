@@ -405,29 +405,37 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
     let block = Block::default().borders(Borders::ALL).title(" Help ");
 
     let paragraph = Paragraph::new(
-        "F1/H               Show this help\n\
-         Q                  Quit\n\
-         Ctrl + O           Open repository\n\
-         M                  Set branching model\n\
+        "\n\
+         General\n  \
+         \n  \
+           F1/H               Show this help\n  \
+           Q                  Quit\n  \
+           Ctrl + O           Open repository\n  \
+           M                  Set branching model\n  \
          \n\
-         Up/Down            Select / navigate / scroll\n\
-         Shift + Up/Down    Navigate fast\n\
-         Home/End           Navigate to first/last\n\
-         Ctrl + Up/Down     Secondary selection (compare arbitrary commits)\n\
-         Backspace          Clear secondary selection\n\
-         Ctrl + Left/Right  Scroll horizontal\n\
-         Enter              Jump to selected branch/tag\n\
+         Layout/panels\n  \
+         \n  \
+           Left/Right         Change panel\n  \
+           Tab                Panel to fullscreen\n  \
+           Ecs                Return to default view\n  \
+           L                  Toggle horizontal/vertical layout\n  \
+           B                  Toggle show branch list\n  \
          \n\
-         +/-                Increase/decrease number of diff context lines
+         Navigate/select\n  \
+         \n  \
+           Up/Down            Select / navigate / scroll\n  \
+           Shift + Up/Down    Navigate fast\n  \
+           Home/End           Navigate to first/last\n  \
+           Ctrl + Up/Down     Secondary selection (compare arbitrary commits)\n  \
+           Backspace          Clear secondary selection\n  \
+           Ctrl + Left/Right  Scroll horizontal\n  \
+           Enter              Jump to selected branch/tag\n  \
          \n\
-         Left/Right         Change panel\n\
-         Tab                Panel to fullscreen\n\
-         Ecs                Return to default view\n\
-         L                  Toggle horizontal/vertical layout\n\
-         B                  Toggle show branch list\n\
-         Ctrl + L           Toggle line numbers in diff\n\
-         \n\
-         R                  Reload repository graph",
+         Diffs panel\n  \
+         \n  \
+           +/-                Increase/decrease number of diff context lines\n  \
+           D/N/O              Show diff or new/old version of file\n  \
+           Ctrl + L           Toggle line numbers",
     )
     .block(block)
     .scroll((scroll, 0));

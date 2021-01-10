@@ -483,17 +483,20 @@ impl App {
         Ok(())
     }
 
+    pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.line_numbers = !self.line_numbers;
+            self.file_changed()?;
+        }
+        Ok(())
+    }
+
     pub fn toggle_layout(&mut self) {
         self.horizontal_split = !self.horizontal_split;
     }
 
     pub fn toggle_branches(&mut self) {
         self.show_branches = !self.show_branches;
-    }
-
-    pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
-        self.line_numbers = !self.line_numbers;
-        self.file_changed()
     }
 
     pub fn show_help(&mut self) {
