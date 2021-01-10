@@ -711,15 +711,32 @@ fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {
         7,
         BranchItemType::Heading,
     ));
-    for idx in &graph.tags {
-        let branch = &graph.all_branches[*idx];
-        branches.push(BranchItem::new(
-            branch.name.clone(),
-            Some(*idx),
-            branch.visual.term_color,
-            BranchItemType::Tag,
-        ));
-    }
+
+    let mut tags: Vec<_> = graph
+        .tags
+        .iter()
+        .filter_map(|idx| {
+            let branch = &graph.all_branches[*idx];
+            if let Ok(commit) = graph.repository.find_commit(branch.target) {
+                let time = commit.time();
+                Some((
+                    BranchItem::new(
+                        branch.name.clone(),
+                        Some(*idx),
+                        branch.visual.term_color,
+                        BranchItemType::Tag,
+                    ),
+                    time.seconds() + time.offset_minutes() as i64 * 60,
+                ))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    tags.sort_by_key(|bt| -bt.1);
+
+    branches.extend(tags.into_iter().map(|bt| bt.0));
 
     branches
 }
