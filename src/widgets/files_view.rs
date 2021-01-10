@@ -187,10 +187,13 @@ impl<'a> StatefulWidget for FileList<'a> {
             };
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
             let max_width_2 = max_element_width.saturating_sub(item.prefix.width());
+
             buf.set_span(elem_x, y as u16, &item.prefix, max_element_width as u16);
-            if state.scroll_x > 0 {
-                let start =
-                    std::cmp::min(item.content.content.width(), state.scroll_x as usize + 2);
+            if state.scroll_x > 0 && item.content.content.width() > max_width_2 {
+                let start = std::cmp::min(
+                    item.content.content.width().saturating_sub(max_width_2) + 2,
+                    std::cmp::min(item.content.content.width(), state.scroll_x as usize + 2),
+                );
                 let span = Span::styled(
                     format!("..{}", &item.content.content[start..]),
                     item.content.style,

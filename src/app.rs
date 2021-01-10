@@ -414,6 +414,9 @@ impl App {
         } else {
             self.active_view = ActiveView::Graph;
             self.is_fullscreen = false;
+            if let Some(content) = &mut self.commit_state.content {
+                content.diffs.state.scroll_x = 0;
+            }
         }
     }
 
