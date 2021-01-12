@@ -5,14 +5,19 @@ use crate::widgets::commit_view::CommitView;
 use crate::widgets::files_view::{FileList, FileListItem};
 use crate::widgets::graph_view::GraphView;
 use crate::widgets::models_view::ModelListState;
+use lazy_static::lazy_static;
 use tui::backend::Backend;
 use tui::layout::{Constraint, Direction, Layout, Rect};
 use tui::style::{Color, Modifier, Style};
-use tui::text::{Span, Text};
+use tui::text::{Span, Spans, Text};
 use tui::widgets::{
     Block, BorderType, Borders, Clear, List, ListItem as TuiListItem, Paragraph, Wrap,
 };
 use tui::Frame;
+
+lazy_static! {
+    pub static ref HINT_STYLE: Style = Style::default().fg(Color::Cyan);
+}
 
 pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
     let chunks = Layout::default()
@@ -30,7 +35,7 @@ pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
     let paragraph = Paragraph::new(format!("{}", &dialog.location.display())).block(location_block);
     f.render_widget(paragraph, top_chunks[0]);
 
-    let help = Paragraph::new("  Navigate with Arrows, confirm with Enter.");
+    let help = Paragraph::new("  Navigate with Arrows, confirm with Enter, abort with Esc.");
     f.render_widget(help, top_chunks[1]);
 
     let list_block = Block::default()
@@ -55,6 +60,7 @@ pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
         draw_error_dialog(f, f.size(), error, dialog.color);
     }
 }
+
 pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     if let ActiveView::Help(scroll) = app.active_view {
         draw_help(f, f.size(), scroll);
@@ -134,10 +140,25 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     }
 }
 
+fn create_title<'a>(title: &'a str, hint: &'a str, color: bool) -> Spans<'a> {
+    Spans(vec![
+        Span::raw(format!(" {} ", title)),
+        if color {
+            Span::styled(hint, *HINT_STYLE)
+        } else {
+            Span::raw(hint)
+        },
+    ])
+}
+
 fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default()
-        .borders(Borders::ALL)
-        .title(format!(" Graph - {} ", app.repo_name));
+    let title = format!("Graph - {}", app.repo_name);
+    let mut block = Block::default().borders(Borders::ALL).title(create_title(
+        &title,
+        " <-Branches | Commit-> ",
+        app.color,
+    ));
+
     if app.active_view == ActiveView::Graph {
         block = block.border_type(BorderType::Thick);
     }
@@ -153,8 +174,14 @@ fn draw_graph<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
 fn draw_branches<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     let color = app.color;
+
+    let mut block = Block::default().borders(Borders::ALL).title(create_title(
+        "Branches",
+        " Graph-> ",
+        app.color,
+    ));
+
     if let Some(state) = &mut app.graph_state.branches {
-        let mut block = Block::default().borders(Borders::ALL).title(" Branches ");
         if app.active_view == ActiveView::Branches {
             block = block.border_type(BorderType::Thick);
         }
@@ -182,7 +209,6 @@ fn draw_branches<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_stateful_widget(list, target, &mut state.state);
     } else {
-        let mut block = Block::default().borders(Borders::ALL).title("Files");
         if app.active_view == ActiveView::Files {
             block = block.border_type(BorderType::Thick);
         }
@@ -191,7 +217,12 @@ fn draw_branches<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 }
 
 fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
-    let mut block = Block::default().borders(Borders::ALL).title(" Commit ");
+    let mut block = Block::default().borders(Borders::ALL).title(create_title(
+        "Commit",
+        " <-Graph | Files-> ",
+        app.color,
+    ));
+
     if app.active_view == ActiveView::Commit {
         block = block.border_type(BorderType::Thick);
     }
@@ -204,11 +235,17 @@ fn draw_commit<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     let color = app.color;
     if let Some(state) = &mut app.commit_state.content {
-        let mut block = Block::default().borders(Borders::ALL).title(format!(
-            " Files ({}..{}) ",
+        let title = format!(
+            "Files ({}..{})",
             &state.compare_oid.to_string()[..7],
             &state.oid.to_string()[..7]
+        );
+        let mut block = Block::default().borders(Borders::ALL).title(create_title(
+            &title,
+            " <-Commit | Diff-> ",
+            app.color,
         ));
+
         if app.active_view == ActiveView::Files {
             block = block.border_type(BorderType::Thick);
         }
@@ -241,7 +278,11 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_stateful_widget(list, target, &mut state.diffs.state);
     } else {
-        let mut block = Block::default().borders(Borders::ALL).title("Files");
+        let mut block = Block::default().borders(Borders::ALL).title(create_title(
+            "Files",
+            " <-Commit | Diff-> ",
+            app.color,
+        ));
         if app.active_view == ActiveView::Files {
             block = block.border_type(BorderType::Thick);
         }
@@ -253,14 +294,18 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
     if let Some(state) = &app.diff_state.content {
         let title = match app.diff_options.diff_mode {
             DiffMode::Diff => format!(
-                " Diff ({}..{}) ",
+                "Diff ({}..{})",
                 &state.compare_oid.to_string()[..7],
                 &state.oid.to_string()[..7]
             ),
-            DiffMode::Old => format!(" Diff (old: {}) ", &state.compare_oid.to_string()[..7],),
-            DiffMode::New => format!(" Diff (new: {}) ", &state.oid.to_string()[..7],),
+            DiffMode::Old => format!("Diff (old: {})", &state.compare_oid.to_string()[..7],),
+            DiffMode::New => format!("Diff (new: {})", &state.oid.to_string()[..7],),
         };
-        let mut block = Block::default().borders(Borders::ALL).title(title);
+        let mut block = Block::default().borders(Borders::ALL).title(create_title(
+            &title,
+            " <-Files ",
+            app.color,
+        ));
         if app.active_view == ActiveView::Diff {
             block = block.border_type(BorderType::Thick);
         }
@@ -338,7 +383,11 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
 
         f.render_widget(paragraph, target);
     } else {
-        let mut block = Block::default().borders(Borders::ALL).title(" Diff ");
+        let mut block = Block::default().borders(Borders::ALL).title(create_title(
+            "Diff",
+            " <-Files ",
+            app.color,
+        ));
         if app.active_view == ActiveView::Diff {
             block = block.border_type(BorderType::Thick);
         }
@@ -402,7 +451,9 @@ fn draw_models<B: Backend>(
 }
 
 fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
-    let block = Block::default().borders(Borders::ALL).title(" Help ");
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Help [back with Esc] ");
 
     let paragraph = Paragraph::new(
         "\n\

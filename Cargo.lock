@@ -216,6 +216,7 @@ dependencies = [
  "git-graph",
  "git2",
  "itertools 0.10.0",
+ "lazy_static",
  "muncher",
  "platform-dirs",
  "textwrap 0.13.2",
