@@ -488,7 +488,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          \n  \
            Up/Down            Select / navigate / scroll\n  \
            Shift + Up/Down    Navigate fast\n  \
-           Home/End           Navigate to first/last\n  \
+           Home/End           Navigate to HEAD/last\n  \
            Ctrl + Up/Down     Secondary selection (compare arbitrary commits)\n  \
            Backspace          Clear secondary selection\n  \
            Ctrl + Left/Right  Scroll horizontal\n  \

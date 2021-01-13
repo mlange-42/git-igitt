@@ -147,7 +147,8 @@ impl App {
         graph_lines: Vec<String>,
         text_lines: Vec<String>,
         indices: Vec<usize>,
-    ) -> App {
+        select_head: bool,
+    ) -> Result<App, String> {
         let branches = get_branches(&graph);
 
         self.graph_state.graph = Some(graph);
@@ -156,7 +157,16 @@ impl App {
         self.graph_state.indices = indices;
         self.graph_state.branches = Some(StatefulList::with_items(branches));
 
-        self
+        if select_head {
+            if let Some(graph) = &self.graph_state.graph {
+                if let Some(index) = graph.indices.get(&graph.head.oid) {
+                    self.graph_state.selected = Some(*index);
+                    self.selection_changed()?;
+                }
+            }
+        }
+
+        Ok(self)
     }
 
     pub fn with_branches(mut self, branches: Vec<(Option<String>, Option<Oid>)>) -> App {
@@ -199,7 +209,8 @@ impl App {
             if sel_idx.is_some() != old_idx.is_some() {
                 self.selection_changed()?;
             }
-            Ok(self.with_graph(graph, graph_lines, text_lines, indices))
+
+            self.with_graph(graph, graph_lines, text_lines, indices, false)
         } else {
             Ok(self)
         }
@@ -309,9 +320,14 @@ impl App {
 
     pub fn on_home(&mut self) -> Result<(), String> {
         if let ActiveView::Graph = self.active_view {
-            if !self.graph_state.graph_lines.is_empty() {
-                self.graph_state.selected = Some(0);
-                self.selection_changed()?;
+            if let Some(graph) = &self.graph_state.graph {
+                if let Some(index) = graph.indices.get(&graph.head.oid) {
+                    self.graph_state.selected = Some(*index);
+                    self.selection_changed()?;
+                } else if !self.graph_state.graph_lines.is_empty() {
+                    self.graph_state.selected = Some(0);
+                    self.selection_changed()?;
+                }
             }
         }
         Ok(())

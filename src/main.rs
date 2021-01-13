@@ -712,7 +712,7 @@ fn create_app(
 
     Ok(
         App::new(format!("git-igitt - {}", name), name.clone(), models_dir)
-            .with_graph(graph, graph_lines, text_lines, indices)
+            .with_graph(graph, graph_lines, text_lines, indices, true)?
             .with_branches(branches)
             .with_color(settings.colored),
     )
