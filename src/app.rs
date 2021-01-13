@@ -24,6 +24,7 @@ pub enum ActiveView {
     Files,
     Diff,
     Models,
+    Search,
     Help(u16),
 }
 
@@ -115,6 +116,7 @@ pub struct App {
     pub models_path: PathBuf,
     pub error_message: Option<String>,
     pub diff_options: DiffOptions,
+    pub search_term: Option<String>,
 }
 
 impl App {
@@ -138,6 +140,7 @@ impl App {
             models_path,
             error_message: None,
             diff_options: DiffOptions::default(),
+            search_term: None,
         }
     }
 
@@ -263,6 +266,7 @@ impl App {
                     state.bwd(step)
                 }
             }
+            _ => {}
         }
         Ok(())
     }
@@ -314,6 +318,7 @@ impl App {
                     state.fwd(step)
                 }
             }
+            _ => {}
         }
         Ok(())
     }
@@ -386,6 +391,7 @@ impl App {
                 ActiveView::Diff => ActiveView::Diff,
                 ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
                 ActiveView::Models => ActiveView::Models,
+                ActiveView::Search => ActiveView::Search,
             }
         }
         Ok(())
@@ -425,6 +431,7 @@ impl App {
                 ActiveView::Diff => ActiveView::Files,
                 ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
                 ActiveView::Models => ActiveView::Models,
+                ActiveView::Search => ActiveView::Search,
             }
         }
     }
@@ -433,6 +440,10 @@ impl App {
         match &self.active_view {
             ActiveView::Help(_) => {
                 self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph)
+            }
+            ActiveView::Search => {
+                self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
+                self.search()?;
             }
             ActiveView::Branches => {
                 if let Some(graph) = &self.graph_state.graph {
@@ -466,6 +477,16 @@ impl App {
     pub fn on_backspace(&mut self) -> Result<(), String> {
         match &self.active_view {
             ActiveView::Help(_) | ActiveView::Models => {}
+            ActiveView::Search => {
+                if let Some(term) = &self.search_term {
+                    let term = &term[0..(term.len() - 1)];
+                    self.search_term = if term.is_empty() {
+                        None
+                    } else {
+                        Some(term.to_string())
+                    };
+                }
+            }
             _ => {
                 if self.graph_state.secondary_selected.is_some() {
                     self.graph_state.secondary_selected = None;
@@ -498,20 +519,110 @@ impl App {
     }
 
     pub fn on_esc(&mut self) -> Result<(), String> {
-        if let ActiveView::Help(_) = self.active_view {
-            self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
-        } else if let ActiveView::Models = self.active_view {
-            self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
-        } else {
-            self.active_view = ActiveView::Graph;
-            self.is_fullscreen = false;
-            if let Some(content) = &mut self.commit_state.content {
-                content.diffs.state.scroll_x = 0;
+        match self.active_view {
+            ActiveView::Models | ActiveView::Help(_) => {
+                self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
             }
-            self.diff_options.diff_mode = DiffMode::Diff;
-            self.file_changed()?;
+            ActiveView::Search => {
+                self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
+                self.exit_search(true);
+            }
+            _ => {
+                self.active_view = ActiveView::Graph;
+                self.is_fullscreen = false;
+                if let Some(content) = &mut self.commit_state.content {
+                    content.diffs.state.scroll_x = 0;
+                }
+                self.diff_options.diff_mode = DiffMode::Diff;
+                self.file_changed()?;
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn character_entered(&mut self, c: char) {
+        if let ActiveView::Search = self.active_view {
+            if let Some(term) = &self.search_term {
+                self.search_term = Some(format!("{}{}", term, c))
+            } else {
+                self.search_term = Some(format!("{}", c))
+            }
+        }
+    }
+
+    pub fn open_search(&mut self) {
+        // TODO: remove once searching in diffs works
+        self.active_view = ActiveView::Graph;
+
+        if let ActiveView::Search = self.active_view {
+        } else {
+            let mut temp = ActiveView::Search;
+            std::mem::swap(&mut temp, &mut self.active_view);
+            self.prev_active_view = Some(temp);
+        }
+    }
+    pub fn exit_search(&mut self, _abort: bool) {}
+
+    pub fn search(&mut self) -> Result<(), String> {
+        // TODO: remove once searching in diffs works
+        self.active_view = ActiveView::Graph;
+
+        match &self.active_view {
+            ActiveView::Branches | ActiveView::Graph | ActiveView::Commit => self.search_graph()?,
+            ActiveView::Files | ActiveView::Diff => self.search_diff(),
+            _ => {}
         }
         Ok(())
+    }
+    fn search_graph(&mut self) -> Result<(), String> {
+        if let Some(search) = &self.search_term {
+            let term = search.to_lowercase();
+
+            let search_start = if let Some(sel_idx) = &self.graph_state.selected {
+                sel_idx + 1
+            } else {
+                0
+            };
+            for idx in search_start..self.graph_state.indices.len() {
+                if self.commit_contains(idx, &term) {
+                    self.graph_state.selected = Some(idx);
+                    self.selection_changed()?;
+                    return Ok(());
+                }
+            }
+            for idx in 0..search_start {
+                if self.commit_contains(idx, &term) {
+                    self.graph_state.selected = Some(idx);
+                    self.selection_changed()?;
+                    return Ok(());
+                }
+            }
+        }
+        Ok(())
+    }
+
+    fn commit_contains(&self, commit_idx: usize, term: &str) -> bool {
+        let num_lines = self.graph_state.text_lines.len();
+        let line_start = self.graph_state.indices[commit_idx];
+        let line_end = self
+            .graph_state
+            .indices
+            .get(commit_idx + 1)
+            .unwrap_or(&num_lines);
+        for line_idx in line_start..*line_end {
+            if self.graph_state.text_lines[line_idx]
+                .to_lowercase()
+                .contains(term)
+            {
+                return true;
+            }
+        }
+        false
+    }
+
+    fn search_diff(&mut self) {
+        // TODO implement search in diff panel
     }
 
     pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {

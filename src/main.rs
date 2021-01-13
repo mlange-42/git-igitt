@@ -391,6 +391,19 @@ fn run(
                         _ => {}
                     }
                 }
+            }
+            if app.active_view == ActiveView::Search {
+                if let Event::Input(event) = rx.recv()? {
+                    match event.code {
+                        KeyCode::Char(c) => app.character_entered(c),
+                        KeyCode::Esc => app.on_esc()?,
+                        KeyCode::Enter | KeyCode::F(3) => {
+                            app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                        }
+                        KeyCode::Backspace => app.on_backspace()?,
+                        _ => {}
+                    }
+                }
             } else {
                 match rx.recv()? {
                     Event::Input(event) => match event.code {
@@ -403,11 +416,14 @@ fn run(
                         KeyCode::Char('h') | KeyCode::F(1) => {
                             app.show_help();
                         }
-                        KeyCode::Char('m') => {
-                            if let Err(err) = app.select_model() {
-                                app.set_error(err);
+                        KeyCode::Char('m') => match app.active_view {
+                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                            _ => {
+                                if let Err(err) = app.select_model() {
+                                    app.set_error(err);
+                                }
                             }
-                        }
+                        },
                         KeyCode::Char('r') => {
                             app = app.reload(&settings, max_commits)?;
                         }
@@ -421,23 +437,42 @@ fn run(
                         KeyCode::Char('b') => {
                             app.toggle_branches();
                         }
-                        KeyCode::Char('o') => {
-                            if event.modifiers.contains(KeyModifiers::CONTROL) {
-                                if let Some(graph) = &app.graph_state.graph {
-                                    let path = graph.repository.path();
-                                    let path = path.parent().unwrap_or(path);
-                                    file_dialog.location =
-                                        PathBuf::from(path.parent().unwrap_or(path));
-                                    file_dialog.selection = Some(PathBuf::from(path));
+                        KeyCode::Char('o') => match app.active_view {
+                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                            _ => {
+                                if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                    if let Some(graph) = &app.graph_state.graph {
+                                        let path = graph.repository.path();
+                                        let path = path.parent().unwrap_or(path);
+                                        file_dialog.location =
+                                            PathBuf::from(path.parent().unwrap_or(path));
+                                        file_dialog.selection = Some(PathBuf::from(path));
+                                    } else {
+                                        file_dialog.location = std::env::current_dir()?;
+                                        file_dialog.selection = None
+                                    }
+                                    open_file = true;
                                 } else {
-                                    file_dialog.location = std::env::current_dir()?;
-                                    file_dialog.selection = None
+                                    app.set_diff_mode(DiffMode::Old)?;
                                 }
-                                open_file = true;
-                            } else {
-                                app.set_diff_mode(DiffMode::Old)?;
+                            }
+                        },
+                        KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                            match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                                _ => app.open_search(),
                             }
                         }
+                        KeyCode::F(3) => match app.active_view {
+                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                            _ => {
+                                if app.search_term.is_none() {
+                                    app.open_search()
+                                } else {
+                                    app.search()?
+                                }
+                            }
+                        },
                         KeyCode::Char('n') => {
                             app.set_diff_mode(DiffMode::New)?;
                         }

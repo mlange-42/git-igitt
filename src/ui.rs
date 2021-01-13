@@ -93,7 +93,12 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
     }
 
     if app.is_fullscreen {
-        match app.active_view {
+        let view = if app.active_view == ActiveView::Search {
+            app.prev_active_view.as_ref().unwrap_or(&ActiveView::Graph)
+        } else {
+            &app.active_view
+        };
+        match view {
             ActiveView::Branches => draw_branches(f, f.size(), app),
             ActiveView::Graph => draw_graph(f, f.size(), app),
             ActiveView::Commit => draw_commit(f, f.size(), app),
@@ -137,9 +142,20 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
             .split(chunks[1]);
 
         match app.active_view {
+            ActiveView::Search => {
+                if let Some(prev) = &app.prev_active_view {
+                    match prev {
+                        ActiveView::Files | ActiveView::Diff => draw_diff(f, chunks[0], app),
+                        _ => draw_graph(f, chunks[0], app),
+                    }
+                } else {
+                    draw_graph(f, chunks[0], app)
+                }
+            }
             ActiveView::Files | ActiveView::Diff => draw_diff(f, chunks[0], app),
             _ => draw_graph(f, chunks[0], app),
         }
+
         if show_branches {
             draw_branches(f, top_chunks[0], app);
         }
@@ -149,6 +165,8 @@ pub fn draw<B: Backend>(f: &mut Frame<B>, app: &mut App) {
 
     if let Some(error) = &app.error_message {
         draw_error_dialog(f, f.size(), error, app.color);
+    } else if app.active_view == ActiveView::Search {
+        draw_search_dialog(f, f.size(), &app.search_term);
     }
 }
 
@@ -494,6 +512,11 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
            Ctrl + Left/Right  Scroll horizontal\n  \
            Enter              Jump to selected branch/tag\n  \
          \n\
+         Search\n  \
+         \n  \
+           F3/Ctrl+F          Open search dialog\n  \
+           F3                 Continue search\n  \
+         \n\
          Diffs panel\n  \
          \n  \
            +/-                Increase/decrease number of diff context lines\n  \
@@ -522,6 +545,24 @@ fn draw_error_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, error: &str, co
     f.render_widget(Clear, area);
     f.render_widget(paragraph, area);
 }
+
+fn draw_search_dialog<B: Backend>(f: &mut Frame<B>, target: Rect, search: &Option<String>) {
+    let block = Block::default()
+        .title(" Search - Search with Enter, abort with Esc ")
+        .borders(Borders::ALL)
+        .border_type(BorderType::Thick);
+
+    let empty = "".to_string();
+    let text = &search.as_ref().unwrap_or(&empty)[..];
+    let paragraph = Paragraph::new(format!("{}_", text))
+        .block(block)
+        .wrap(Wrap { trim: true });
+
+    let area = centered_rect(60, 12, target);
+    f.render_widget(Clear, area);
+    f.render_widget(paragraph, area);
+}
+
 /// helper function to create a centered rect using up
 /// certain percentage of the available rect `r`
 fn centered_rect(size_x: u16, size_y: u16, r: Rect) -> Rect {
