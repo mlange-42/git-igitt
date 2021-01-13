@@ -78,6 +78,9 @@ impl<'a> FileDialog<'a> {
 
     pub fn on_right(&mut self) -> Result<(), String> {
         if let Some(sel) = self.state.selected() {
+            if sel == 0 {
+                return self.on_left();
+            }
             let temp_path = self.location.clone();
             let file = &self.dirs[sel];
             let mut path = PathBuf::from(&self.location);
@@ -125,6 +128,8 @@ impl<'a> FileDialog<'a> {
                 Err(_) => None,
             })
             .collect();
+        self.dirs.insert(0, ("..".to_string(), false));
+
         if self.dirs.is_empty() {
             self.state.select(None);
         } else if let Some(prev) = prev_location {
