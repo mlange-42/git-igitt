@@ -550,6 +550,13 @@ fn run(
                         terminal.show_cursor()?;
                         break;
                     }
+                    KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if let Some(prev_app) = file_dialog.previous_app.take() {
+                            app = Some(prev_app);
+                        } else {
+                            file_dialog.set_error("No repository to return to.\nSelect a Git rrpository or quit with Q.".to_string())
+                        }
+                    }
                     KeyCode::Esc => {
                         if let Some(prev_app) = file_dialog.previous_app.take() {
                             app = Some(prev_app);
@@ -570,12 +577,8 @@ fn run(
                                 Ok(repo) => {
                                     app = Some(create_app(repo, &mut settings, model, max_commits)?)
                                 }
-                                Err(err) => {
-                                    file_dialog.error_message = Some(format!(
-                                        "Can't open repository at {}\n{}",
-                                        path.display(),
-                                        err.message().to_string()
-                                    ));
+                                Err(_) => {
+                                    file_dialog.on_right()?;
                                 }
                             };
                         }
