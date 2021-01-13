@@ -1,4 +1,5 @@
 use crate::app::App;
+use git2::Repository;
 use std::io::Error;
 use std::path::PathBuf;
 use tui::widgets::ListState;
@@ -7,7 +8,7 @@ pub struct FileDialog<'a> {
     pub title: &'a str,
     pub location: PathBuf,
     pub selection: Option<PathBuf>,
-    pub dirs: Vec<String>,
+    pub dirs: Vec<(String, bool)>,
     pub error_message: Option<String>,
     pub color: bool,
     pub state: ListState,
@@ -80,7 +81,7 @@ impl<'a> FileDialog<'a> {
             let temp_path = self.location.clone();
             let file = &self.dirs[sel];
             let mut path = PathBuf::from(&self.location);
-            path.push(file);
+            path.push(&file.0);
             self.location = path.clone();
             match self.selection_changed(None) {
                 Ok(_) => {}
@@ -101,7 +102,7 @@ impl<'a> FileDialog<'a> {
         if let Some(sel) = self.state.selected() {
             let file = &self.dirs[sel];
             let mut path = PathBuf::from(&self.location);
-            path.push(file);
+            path.push(&file.0);
             self.selection = Some(path);
         }
     }
@@ -112,10 +113,11 @@ impl<'a> FileDialog<'a> {
             .filter_map(|path| match path {
                 Ok(path) => {
                     if path.path().is_dir() {
+                        let is_repo = Repository::open(path.path()).is_ok();
                         path.path()
                             .components()
                             .last()
-                            .and_then(|c| c.as_os_str().to_str().map(|s| s.to_string()))
+                            .and_then(|c| c.as_os_str().to_str().map(|s| (s.to_string(), is_repo)))
                     } else {
                         None
                     }
@@ -130,7 +132,7 @@ impl<'a> FileDialog<'a> {
                 .components()
                 .last()
                 .and_then(|comp| comp.as_os_str().to_str())
-                .and_then(|dir| self.dirs.iter().position(|d| d == dir))
+                .and_then(|dir| self.dirs.iter().position(|d| d.0 == dir))
             {
                 self.state.select(Some(prev_index));
             } else {
