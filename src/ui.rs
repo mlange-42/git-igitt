@@ -45,7 +45,19 @@ pub fn draw_open_repo<B: Backend>(f: &mut Frame<B>, dialog: &mut FileDialog) {
     let items: Vec<_> = dialog
         .dirs
         .iter()
-        .map(|f| TuiListItem::new(&f[..]))
+        .map(|f| {
+            if dialog.color {
+                if f.1 {
+                    TuiListItem::new(&f.0[..]).style(Style::default().fg(Color::LightGreen))
+                } else {
+                    TuiListItem::new(&f.0[..])
+                }
+            } else if f.1 {
+                TuiListItem::new(format!("+ {}", &f.0[..]))
+            } else {
+                TuiListItem::new(format!("  {}", &f.0[..]))
+            }
+        })
         .collect();
 
     let mut list = List::new(items).block(list_block).highlight_symbol("> ");

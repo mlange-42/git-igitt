@@ -328,7 +328,7 @@ fn run(
     let backend = CrosstermBackend::new(sout);
     let mut terminal = Terminal::new(backend)?;
 
-    let (tx, rx) = std::sync::mpsc::channel();
+    let (tx, rx) = std::sync::mpsc::sync_channel(2);
 
     let tick_rate = Duration::from_millis(TICK_RATE);
     let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
@@ -550,6 +550,13 @@ fn run(
                         terminal.show_cursor()?;
                         break;
                     }
+                    KeyCode::Char('o') if event.modifiers.contains(KeyModifiers::CONTROL) => {
+                        if let Some(prev_app) = file_dialog.previous_app.take() {
+                            app = Some(prev_app);
+                        } else {
+                            file_dialog.set_error("No repository to return to.\nSelect a Git rrpository or quit with Q.".to_string())
+                        }
+                    }
                     KeyCode::Esc => {
                         if let Some(prev_app) = file_dialog.previous_app.take() {
                             app = Some(prev_app);
@@ -570,12 +577,8 @@ fn run(
                                 Ok(repo) => {
                                     app = Some(create_app(repo, &mut settings, model, max_commits)?)
                                 }
-                                Err(err) => {
-                                    file_dialog.error_message = Some(format!(
-                                        "Can't open repository at {}\n{}",
-                                        path.display(),
-                                        err.message().to_string()
-                                    ));
+                                Err(_) => {
+                                    file_dialog.on_right()?;
                                 }
                             };
                         }
