@@ -11,7 +11,8 @@ use unicode_width::UnicodeWidthStr;
 
 pub struct GraphViewState {
     pub graph: Option<GitGraph>,
-    pub text: Vec<String>,
+    pub graph_lines: Vec<String>,
+    pub text_lines: Vec<String>,
     pub indices: Vec<usize>,
     pub offset: usize,
     pub selected: Option<usize>,
@@ -24,7 +25,8 @@ impl Default for GraphViewState {
     fn default() -> GraphViewState {
         GraphViewState {
             graph: None,
-            text: vec![],
+            graph_lines: vec![],
+            text_lines: vec![],
             indices: vec![],
             offset: 0,
             selected: None,
@@ -44,7 +46,7 @@ impl GraphViewState {
             };
             self.selected = Some(new_idx);
             true
-        } else if !self.text.is_empty() {
+        } else if !self.graph_lines.is_empty() {
             self.selected = Some(0);
             true
         } else {
@@ -64,7 +66,7 @@ impl GraphViewState {
             };
             self.secondary_selected = Some(new_idx);
             true
-        } else if !self.text.is_empty() {
+        } else if !self.graph_lines.is_empty() {
             if let Some(sel) = self.selected {
                 let new_idx = if down {
                     std::cmp::min(sel.saturating_add(steps), self.indices.len() - 1)
@@ -154,7 +156,7 @@ impl<'a> StatefulWidget for GraphView<'a> {
             return;
         }
 
-        if state.text.is_empty() {
+        if state.graph_lines.is_empty() {
             return;
         }
         let list_height = list_area.height as usize;
@@ -163,17 +165,17 @@ impl<'a> StatefulWidget for GraphView<'a> {
 
         let height = std::cmp::min(
             list_height as usize,
-            state.text.len().saturating_sub(state.offset),
+            state.graph_lines.len().saturating_sub(state.offset),
         );
         let mut end = start + height;
 
         let selected_row = state.selected.map(|idx| state.indices[idx]);
-        let selected = selected_row.unwrap_or(0).min(state.text.len() - 1);
+        let selected = selected_row.unwrap_or(0).min(state.graph_lines.len() - 1);
 
         let secondary_selected_row = state.secondary_selected.map(|idx| state.indices[idx]);
         let secondary_selected = secondary_selected_row
             .unwrap_or(0)
-            .min(state.text.len() - 1);
+            .min(state.graph_lines.len() - 1);
 
         let move_to_selected = if state.secondary_changed {
             secondary_selected
@@ -201,9 +203,10 @@ impl<'a> StatefulWidget for GraphView<'a> {
             .collect::<String>();
 
         let style = Style::default();
-        for (current_height, (i, item)) in state
-            .text
-            .iter_mut()
+        for (current_height, (i, (graph_item, text_item))) in state
+            .graph_lines
+            .iter()
+            .zip(state.text_lines.iter())
             .enumerate()
             .skip(state.offset)
             .take(end - start)
@@ -234,7 +237,9 @@ impl<'a> StatefulWidget for GraphView<'a> {
 
             let max_element_width = (list_area.width - (elem_x - x)) as usize;
 
-            let body = CtrlChars::parse(item).into_text();
+            let mut body = CtrlChars::parse(graph_item).into_text();
+            body.extend(CtrlChars::parse(&format!("  {}", text_item)).into_text());
+
             let mut x = elem_x;
             let mut remaining_width = max_element_width as u16;
             for txt in body {

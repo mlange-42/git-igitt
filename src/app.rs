@@ -141,11 +141,18 @@ impl App {
         }
     }
 
-    pub fn with_graph(mut self, graph: GitGraph, text: Vec<String>, indices: Vec<usize>) -> App {
+    pub fn with_graph(
+        mut self,
+        graph: GitGraph,
+        graph_lines: Vec<String>,
+        text_lines: Vec<String>,
+        indices: Vec<usize>,
+    ) -> App {
         let branches = get_branches(&graph);
 
         self.graph_state.graph = Some(graph);
-        self.graph_state.text = text;
+        self.graph_state.graph_lines = graph_lines;
+        self.graph_state.text_lines = text_lines;
         self.graph_state.indices = indices;
         self.graph_state.branches = Some(StatefulList::with_items(branches));
 
@@ -164,7 +171,8 @@ impl App {
 
     pub fn clear_graph(mut self) -> App {
         self.graph_state.graph = None;
-        self.graph_state.text = vec![];
+        self.graph_state.graph_lines = vec![];
+        self.graph_state.text_lines = vec![];
         self.graph_state.indices = vec![];
         self
     }
@@ -183,7 +191,7 @@ impl App {
                 .map(|info| info.oid);
             let repo = graph.take_repository();
             let graph = GitGraph::new(repo, &settings, max_commits)?;
-            let (lines, indices) = print_unicode(&graph, &settings)?;
+            let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
 
             let sel_idx = sel_oid.and_then(|oid| graph.indices.get(&oid)).cloned();
             let old_idx = self.graph_state.selected;
@@ -191,7 +199,7 @@ impl App {
             if sel_idx.is_some() != old_idx.is_some() {
                 self.selection_changed()?;
             }
-            Ok(self.with_graph(graph, lines, indices))
+            Ok(self.with_graph(graph, graph_lines, text_lines, indices))
         } else {
             Ok(self)
         }
@@ -301,7 +309,7 @@ impl App {
 
     pub fn on_home(&mut self) -> Result<(), String> {
         if let ActiveView::Graph = self.active_view {
-            if !self.graph_state.text.is_empty() {
+            if !self.graph_state.graph_lines.is_empty() {
                 self.graph_state.selected = Some(0);
                 self.selection_changed()?;
             }

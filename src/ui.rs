@@ -468,7 +468,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          \n  \
            Left/Right         Change panel\n  \
            Tab                Panel to fullscreen\n  \
-           Ecs                Return to default view\n  \
+           Esc                Return to default view\n  \
            L                  Toggle horizontal/vertical layout\n  \
            B                  Toggle show branch list\n  \
          \n\

@@ -705,11 +705,11 @@ fn create_app(
 
     let graph = GitGraph::new(repository, &settings, max_commits)?;
     let branches = get_branches(&graph)?;
-    let (lines, indices) = print_unicode(&graph, &settings)?;
+    let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
 
     Ok(
         App::new(format!("git-igitt - {}", name), name.clone(), models_dir)
-            .with_graph(graph, lines, indices)
+            .with_graph(graph, graph_lines, text_lines, indices)
             .with_branches(branches)
             .with_color(settings.colored),
     )
