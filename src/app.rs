@@ -343,7 +343,7 @@ impl App {
         Ok(())
     }
 
-    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) {
+    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
         if is_ctrl {
             let step = if is_shift { 15 } else { 3 };
             match self.active_view {
@@ -373,13 +373,22 @@ impl App {
             self.active_view = match &self.active_view {
                 ActiveView::Branches => ActiveView::Graph,
                 ActiveView::Graph => ActiveView::Commit,
-                ActiveView::Commit => ActiveView::Files,
+                ActiveView::Commit => {
+                    if let Some(commit) = &mut self.commit_state.content {
+                        if commit.diffs.state.selected.is_none() && !commit.diffs.items.is_empty() {
+                            commit.diffs.state.selected = Some(0);
+                            self.file_changed()?
+                        }
+                    }
+                    ActiveView::Files
+                }
                 ActiveView::Files => ActiveView::Diff,
                 ActiveView::Diff => ActiveView::Diff,
                 ActiveView::Help(_) => self.prev_active_view.take().unwrap_or(ActiveView::Graph),
                 ActiveView::Models => ActiveView::Models,
             }
         }
+        Ok(())
     }
     pub fn on_left(&mut self, is_shift: bool, is_ctrl: bool) {
         if is_ctrl {

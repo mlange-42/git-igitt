@@ -476,7 +476,7 @@ fn run(
                         KeyCode::Right => app.on_right(
                             event.modifiers.contains(KeyModifiers::SHIFT),
                             event.modifiers.contains(KeyModifiers::CONTROL),
-                        ),
+                        )?,
                         KeyCode::Tab => app.on_tab(),
                         KeyCode::Esc => app.on_esc()?,
                         KeyCode::Enter => {
