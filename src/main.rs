@@ -22,6 +22,7 @@ use git_igitt::{
     ui,
 };
 use platform_dirs::AppDirs;
+use std::time::Instant;
 use std::{
     error::Error,
     io::stdout,
@@ -32,11 +33,11 @@ use std::{
 use tui::{backend::CrosstermBackend, Terminal};
 
 const REPO_CONFIG_FILE: &str = "git-graph.toml";
+const DIFF_DELAY: u64 = 50;
 const CHECK_CHANGE_RATE: u64 = 2000;
 
 enum Event<I> {
     Input(I),
-    Tick,
     Update,
 }
 
@@ -327,7 +328,7 @@ fn run(
     let backend = CrosstermBackend::new(sout);
     let mut terminal = Terminal::new(backend)?;
 
-    let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
+    let repo_refresh_interval = Duration::from_millis(CHECK_CHANGE_RATE);
 
     let mut app = if let Some(repository) = repository.take() {
         Some(create_app(repository, &mut settings, model, max_commits)?)
@@ -343,8 +344,14 @@ fn run(
         let mut sx_old = 0;
         let mut sy_old = 0;
 
-        move || loop {
-            if event::poll(update_tick_rate).unwrap() {
+        move |next_reload: Instant, next_diff: Option<Instant>| loop {
+            let deadline = if let Some(next) = next_diff {
+                next.min(next_reload)
+                    .saturating_duration_since(Instant::now())
+            } else {
+                next_reload.saturating_duration_since(Instant::now())
+            };
+            if event::poll(deadline).unwrap() {
                 match event::read().unwrap() {
                     CEvent::Key(key) => return Event::Input(key),
                     CEvent::Mouse(_) => (),
@@ -352,25 +359,27 @@ fn run(
                         if sx != sx_old || sy != sy_old {
                             sx_old = sx;
                             sy_old = sy;
-                            return Event::Tick;
+                            return Event::Update;
                         }
                     }
                 }
                 continue;
             }
-
             return Event::Update;
         }
     };
 
     terminal.clear()?;
 
+    let mut next_diff_update = None;
+    let mut next_repo_refresh = Instant::now() + repo_refresh_interval;
+
     loop {
         app = if let Some(mut app) = app.take() {
             terminal.draw(|f| ui::draw(f, &mut app))?;
             let mut open_file = false;
             if app.error_message.is_some() {
-                if let Event::Input(event) = next_event() {
+                if let Event::Input(event) = next_event(next_repo_refresh, next_diff_update) {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             app.clear_error();
@@ -385,20 +394,28 @@ fn run(
                     }
                 }
             }
-            if app.active_view == ActiveView::Search {
-                if let Event::Input(event) = next_event() {
+            let reload_diffs = if app.active_view == ActiveView::Search {
+                if let Event::Input(event) = next_event(next_repo_refresh, next_diff_update) {
                     match event.code {
-                        KeyCode::Char(c) => app.character_entered(c),
-                        KeyCode::Esc => app.on_esc()?,
+                        KeyCode::Char(c) => {
+                            app.character_entered(c);
+                            false
+                        }
+                        KeyCode::Esc => {
+                            app.on_esc()?;
+                            false
+                        }
                         KeyCode::Enter | KeyCode::F(3) => {
                             app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
                         }
                         KeyCode::Backspace => app.on_backspace()?,
-                        _ => {}
+                        _ => false,
                     }
+                } else {
+                    false
                 }
             } else {
-                match next_event() {
+                match next_event(next_repo_refresh, next_diff_update) {
                     Event::Input(event) => match event.code {
                         KeyCode::Char('q') => {
                             disable_raw_mode()?;
@@ -408,17 +425,22 @@ fn run(
                         }
                         KeyCode::Char('h') | KeyCode::F(1) => {
                             app.show_help();
+                            false
                         }
-                        KeyCode::Char('m') => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                            _ => {
-                                if let Err(err) = app.select_model() {
-                                    app.set_error(err);
+                        KeyCode::Char('m') => {
+                            match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                                _ => {
+                                    if let Err(err) = app.select_model() {
+                                        app.set_error(err);
+                                    }
                                 }
                             }
-                        },
+                            false
+                        }
                         KeyCode::Char('r') => {
                             app = app.reload(&settings, max_commits)?;
+                            false
                         }
                         KeyCode::Char('l') => {
                             if event.modifiers.contains(KeyModifiers::CONTROL) {
@@ -426,41 +448,48 @@ fn run(
                             } else {
                                 app.toggle_layout();
                             }
+                            false
                         }
                         KeyCode::Char('b') => {
                             app.toggle_branches();
+                            false
                         }
-                        KeyCode::Char('o') => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                            _ => {
-                                if event.modifiers.contains(KeyModifiers::CONTROL) {
-                                    if let Some(graph) = &app.graph_state.graph {
-                                        let path = graph.repository.path();
-                                        let path = path.parent().unwrap_or(path);
-                                        file_dialog.location =
-                                            PathBuf::from(path.parent().unwrap_or(path));
-                                        file_dialog.selection = Some(PathBuf::from(path));
+                        KeyCode::Char('o') => {
+                            match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                                _ => {
+                                    if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                        if let Some(graph) = &app.graph_state.graph {
+                                            let path = graph.repository.path();
+                                            let path = path.parent().unwrap_or(path);
+                                            file_dialog.location =
+                                                PathBuf::from(path.parent().unwrap_or(path));
+                                            file_dialog.selection = Some(PathBuf::from(path));
+                                        } else {
+                                            file_dialog.location = std::env::current_dir()?;
+                                            file_dialog.selection = None
+                                        }
+                                        open_file = true;
                                     } else {
-                                        file_dialog.location = std::env::current_dir()?;
-                                        file_dialog.selection = None
+                                        app.set_diff_mode(DiffMode::Old)?;
                                     }
-                                    open_file = true;
-                                } else {
-                                    app.set_diff_mode(DiffMode::Old)?;
                                 }
                             }
-                        },
+                            false
+                        }
                         KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::CONTROL) => {
                             match app.active_view {
                                 ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
                                 _ => app.open_search(),
                             }
+                            false
                         }
                         KeyCode::F(3) => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => false,
                             _ => {
                                 if app.search_term.is_none() {
-                                    app.open_search()
+                                    app.open_search();
+                                    false
                                 } else {
                                     app.search()?
                                 }
@@ -468,9 +497,11 @@ fn run(
                         },
                         KeyCode::Char('n') => {
                             app.set_diff_mode(DiffMode::New)?;
+                            false
                         }
                         KeyCode::Char('d') => {
                             app.set_diff_mode(DiffMode::Diff)?;
+                            false
                         }
                         KeyCode::Char('p') => {
                             if app.active_view == ActiveView::Models {
@@ -483,9 +514,16 @@ fn run(
                                     app.active_view = ActiveView::Graph;
                                 }
                             }
+                            false
                         }
-                        KeyCode::Char('+') => app.on_plus()?,
-                        KeyCode::Char('-') => app.on_minus()?,
+                        KeyCode::Char('+') => {
+                            app.on_plus()?;
+                            false
+                        }
+                        KeyCode::Char('-') => {
+                            app.on_minus()?;
+                            false
+                        }
 
                         KeyCode::Up => app.on_up(
                             event.modifiers.contains(KeyModifiers::SHIFT),
@@ -497,16 +535,28 @@ fn run(
                         )?,
                         KeyCode::Home => app.on_home()?,
                         KeyCode::End => app.on_end()?,
-                        KeyCode::Left => app.on_left(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        ),
-                        KeyCode::Right => app.on_right(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        )?,
-                        KeyCode::Tab => app.on_tab(),
-                        KeyCode::Esc => app.on_esc()?,
+                        KeyCode::Left => {
+                            app.on_left(
+                                event.modifiers.contains(KeyModifiers::SHIFT),
+                                event.modifiers.contains(KeyModifiers::CONTROL),
+                            );
+                            false
+                        }
+                        KeyCode::Right => {
+                            app.on_right(
+                                event.modifiers.contains(KeyModifiers::SHIFT),
+                                event.modifiers.contains(KeyModifiers::CONTROL),
+                            )?;
+                            false
+                        }
+                        KeyCode::Tab => {
+                            app.on_tab();
+                            false
+                        }
+                        KeyCode::Esc => {
+                            app.on_esc()?;
+                            false
+                        }
                         KeyCode::Enter => {
                             if app.active_view == ActiveView::Models {
                                 let (a, s, result) =
@@ -517,6 +567,7 @@ fn run(
                                     app.set_error(err);
                                     app.active_view = ActiveView::Graph;
                                 }
+                                false
                             } else {
                                 app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
                             }
@@ -524,17 +575,33 @@ fn run(
                         KeyCode::Backspace => {
                             if app.active_view != ActiveView::Models {
                                 app.on_backspace()?
+                            } else {
+                                false
                             }
                         }
-                        _ => {}
+                        _ => false,
                     },
                     Event::Update => {
-                        if app.graph_state.graph.is_some() && has_changed(&mut app)? {
-                            app = app.reload(&settings, max_commits)?;
+                        let now = Instant::now();
+                        if next_repo_refresh <= now {
+                            if app.graph_state.graph.is_some() && has_changed(&mut app)? {
+                                app = app.reload(&settings, max_commits)?;
+                            }
+                            next_repo_refresh = now + repo_refresh_interval;
                         }
+                        if let Some(next) = next_diff_update {
+                            if next <= now {
+                                app.reload_diff_files()?;
+                                next_diff_update = None;
+                            }
+                        }
+                        false
                     }
-                    Event::Tick => {}
                 }
+            };
+            if reload_diffs {
+                app.reload_diff_message()?;
+                next_diff_update = Some(Instant::now() + Duration::from_millis(DIFF_DELAY));
             }
             if app.should_quit {
                 break;
@@ -556,7 +623,7 @@ fn run(
 
             let mut app = None;
             if file_dialog.error_message.is_some() {
-                if let Event::Input(event) = next_event() {
+                if let Event::Input(event) = next_event(next_repo_refresh, next_diff_update) {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             file_dialog.clear_error();
@@ -570,7 +637,7 @@ fn run(
                         _ => {}
                     }
                 }
-            } else if let Event::Input(event) = next_event() {
+            } else if let Event::Input(event) = next_event(next_repo_refresh, next_diff_update) {
                 match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
