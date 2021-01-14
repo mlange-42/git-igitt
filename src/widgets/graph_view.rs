@@ -9,6 +9,8 @@ use tui::style::Style;
 use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
+const SCROLL_MARGIN: usize = 3;
+
 pub struct GraphViewState {
     pub graph: Option<GitGraph>,
     pub graph_lines: Vec<String>,
@@ -177,19 +179,33 @@ impl<'a> StatefulWidget for GraphView<'a> {
             .unwrap_or(0)
             .min(state.graph_lines.len() - 1);
 
+        let selected_index = if state.secondary_changed {
+            state.secondary_selected.unwrap_or(0)
+        } else {
+            state.selected.unwrap_or(0)
+        };
         let move_to_selected = if state.secondary_changed {
             secondary_selected
         } else {
             selected
         };
 
-        if move_to_selected >= end {
-            let diff = move_to_selected + 1 - end;
+        let move_to_end = if selected_index >= state.indices.len() - 1 {
+            state.graph_lines.len() - 1
+        } else {
+            (state.indices[selected_index + 1] - 1)
+                .max(move_to_selected + SCROLL_MARGIN)
+                .min(state.graph_lines.len() - 1)
+        };
+        let move_to_start = move_to_selected.saturating_sub(SCROLL_MARGIN);
+
+        if move_to_end >= end {
+            let diff = move_to_end + 1 - end;
             end += diff;
             start += diff;
         }
-        if move_to_selected < start {
-            let diff = start - move_to_selected;
+        if move_to_start < start {
+            let diff = start - move_to_start;
             end -= diff;
             start -= diff;
         }
