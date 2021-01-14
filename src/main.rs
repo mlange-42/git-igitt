@@ -27,12 +27,11 @@ use std::{
     io::stdout,
     path::{Path, PathBuf},
     str::FromStr,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tui::{backend::CrosstermBackend, Terminal};
 
 const REPO_CONFIG_FILE: &str = "git-graph.toml";
-const TICK_RATE: u64 = 2000;
 const CHECK_CHANGE_RATE: u64 = 2000;
 
 enum Event<I> {
@@ -328,9 +327,6 @@ fn run(
     let backend = CrosstermBackend::new(sout);
     let mut terminal = Terminal::new(backend)?;
 
-    let (tx, rx) = std::sync::mpsc::sync_channel(2);
-
-    let tick_rate = Duration::from_millis(TICK_RATE);
     let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
 
     let mut app = if let Some(repository) = repository.take() {
@@ -343,31 +339,29 @@ fn run(
         FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
     file_dialog.selection_changed(None)?;
 
-    std::thread::spawn(move || {
-        let mut last_update = Instant::now();
+    let mut next_event = {
         let mut sx_old = 0;
         let mut sy_old = 0;
-        loop {
-            let timeout = tick_rate;
-            if event::poll(timeout).unwrap() {
+
+        move || loop {
+            if event::poll(update_tick_rate).unwrap() {
                 match event::read().unwrap() {
-                    CEvent::Key(key) => tx.send(Event::Input(key)).expect("Can't send key event"),
-                    CEvent::Mouse(_) => {}
+                    CEvent::Key(key) => return Event::Input(key),
+                    CEvent::Mouse(_) => (),
                     CEvent::Resize(sx, sy) => {
                         if sx != sx_old || sy != sy_old {
                             sx_old = sx;
                             sy_old = sy;
-                            tx.send(Event::Tick).expect("Can't send resize event")
+                            return Event::Tick;
                         }
                     }
                 }
+                continue;
             }
-            if last_update.elapsed() >= update_tick_rate {
-                tx.send(Event::Update).unwrap();
-                last_update = Instant::now();
-            }
+
+            return Event::Update;
         }
-    });
+    };
 
     terminal.clear()?;
 
@@ -375,9 +369,8 @@ fn run(
         app = if let Some(mut app) = app.take() {
             terminal.draw(|f| ui::draw(f, &mut app))?;
             let mut open_file = false;
-
             if app.error_message.is_some() {
-                if let Event::Input(event) = rx.recv()? {
+                if let Event::Input(event) = next_event() {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             app.clear_error();
@@ -393,7 +386,7 @@ fn run(
                 }
             }
             if app.active_view == ActiveView::Search {
-                if let Event::Input(event) = rx.recv()? {
+                if let Event::Input(event) = next_event() {
                     match event.code {
                         KeyCode::Char(c) => app.character_entered(c),
                         KeyCode::Esc => app.on_esc()?,
@@ -405,7 +398,7 @@ fn run(
                     }
                 }
             } else {
-                match rx.recv()? {
+                match next_event() {
                     Event::Input(event) => match event.code {
                         KeyCode::Char('q') => {
                             disable_raw_mode()?;
@@ -563,7 +556,7 @@ fn run(
 
             let mut app = None;
             if file_dialog.error_message.is_some() {
-                if let Event::Input(event) = rx.recv()? {
+                if let Event::Input(event) = next_event() {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             file_dialog.clear_error();
@@ -577,7 +570,7 @@ fn run(
                         _ => {}
                     }
                 }
-            } else if let Event::Input(event) = rx.recv()? {
+            } else if let Event::Input(event) = next_event() {
                 match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
@@ -622,7 +615,7 @@ fn run(
                 };
             }
             app
-        }
+        };
     }
 
     Ok(())
