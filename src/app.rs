@@ -676,6 +676,7 @@ impl App {
     }
 
     pub fn selection_changed(&mut self) -> Result<(), String> {
+        self.reload_diff_message()?;
         self.reload_diff_files()
     }
 
