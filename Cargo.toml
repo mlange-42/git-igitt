@@ -1,6 +1,6 @@
 [package]
 name = "git-igitt"
-version = "0.1.10"
+version = "0.1.11"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
 edition = "2018"
 
@@ -28,4 +28,4 @@ yansi = "0.5"
 toml = "0.5"
 lazy_static = "1.4"
 textwrap = {version = "0.13", default-features = false, optional = false, features = ["unicode-width"]}
-git-graph = { git = "https://github.com/mlange-42/git-graph", tag = "0.4.0" }
+git-graph = { git = "https://github.com/mlange-42/git-graph", tag = "0.4.1" }
