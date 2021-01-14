@@ -368,9 +368,9 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             }
 
             let space_old_ln =
-                std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().floor() as usize);
+                std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().ceil() as usize);
             let space_new_ln =
-                std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().floor() as usize) + 1;
+                std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().ceil() as usize) + 1;
 
             (
                 space_old_ln,
