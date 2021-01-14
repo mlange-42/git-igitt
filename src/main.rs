@@ -22,22 +22,24 @@ use git_igitt::{
     ui,
 };
 use platform_dirs::AppDirs;
+use std::cell::Cell;
+use std::time::Instant;
 use std::{
     error::Error,
     io::stdout,
     path::{Path, PathBuf},
     str::FromStr,
-    time::{Duration, Instant},
+    time::Duration,
 };
 use tui::{backend::CrosstermBackend, Terminal};
 
 const REPO_CONFIG_FILE: &str = "git-graph.toml";
-const TICK_RATE: u64 = 2000;
 const CHECK_CHANGE_RATE: u64 = 2000;
+const INITIAL_KEY_REPEAT_TIME: u128 = 100;
+const MIN_KEY_REPEAT_TIME: u128 = 50;
 
 enum Event<I> {
     Input(I),
-    Tick,
     Update,
 }
 
@@ -328,10 +330,7 @@ fn run(
     let backend = CrosstermBackend::new(sout);
     let mut terminal = Terminal::new(backend)?;
 
-    let (tx, rx) = std::sync::mpsc::sync_channel(2);
-
-    let tick_rate = Duration::from_millis(TICK_RATE);
-    let update_tick_rate = Duration::from_millis(CHECK_CHANGE_RATE);
+    let repo_refresh_interval = Duration::from_millis(CHECK_CHANGE_RATE);
 
     let mut app = if let Some(repository) = repository.take() {
         Some(create_app(repository, &mut settings, model, max_commits)?)
@@ -343,41 +342,52 @@ fn run(
         FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
     file_dialog.selection_changed(None)?;
 
-    std::thread::spawn(move || {
-        let mut last_update = Instant::now();
+    let next_diff_update: &Cell<Option<Instant>> = &Cell::new(None);
+    let next_repo_refresh = &Cell::new(Instant::now() + repo_refresh_interval);
+
+    let mut next_event = {
         let mut sx_old = 0;
         let mut sy_old = 0;
-        loop {
-            let timeout = tick_rate;
+
+        move || loop {
+            let timeout = if let Some(next) = next_diff_update.get() {
+                next.min(next_repo_refresh.get())
+                    .saturating_duration_since(Instant::now())
+            } else {
+                next_repo_refresh
+                    .get()
+                    .saturating_duration_since(Instant::now())
+            };
             if event::poll(timeout).unwrap() {
                 match event::read().unwrap() {
-                    CEvent::Key(key) => tx.send(Event::Input(key)).expect("Can't send key event"),
-                    CEvent::Mouse(_) => {}
+                    CEvent::Key(key) => return Event::Input(key),
+                    CEvent::Mouse(_) => (),
                     CEvent::Resize(sx, sy) => {
                         if sx != sx_old || sy != sy_old {
                             sx_old = sx;
                             sy_old = sy;
-                            tx.send(Event::Tick).expect("Can't send resize event")
+                            return Event::Update;
                         }
                     }
                 }
+                continue;
             }
-            if last_update.elapsed() >= update_tick_rate {
-                tx.send(Event::Update).unwrap();
-                last_update = Instant::now();
-            }
+            return Event::Update;
         }
-    });
+    };
 
     terminal.clear()?;
+
+    let mut last_key_time = Instant::now();
+    let mut last_key = KeyCode::Esc;
+    let mut key_repeat_time = INITIAL_KEY_REPEAT_TIME / 2;
 
     loop {
         app = if let Some(mut app) = app.take() {
             terminal.draw(|f| ui::draw(f, &mut app))?;
             let mut open_file = false;
-
             if app.error_message.is_some() {
-                if let Event::Input(event) = rx.recv()? {
+                if let Event::Input(event) = next_event() {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             app.clear_error();
@@ -392,156 +402,240 @@ fn run(
                     }
                 }
             }
-            if app.active_view == ActiveView::Search {
-                if let Event::Input(event) = rx.recv()? {
+            let reload_diffs = if app.active_view == ActiveView::Search {
+                if let Event::Input(event) = next_event() {
                     match event.code {
-                        KeyCode::Char(c) => app.character_entered(c),
-                        KeyCode::Esc => app.on_esc()?,
+                        KeyCode::Char(c) => {
+                            app.character_entered(c);
+                            false
+                        }
+                        KeyCode::Esc => {
+                            app.on_esc()?;
+                            false
+                        }
                         KeyCode::Enter | KeyCode::F(3) => {
                             app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
                         }
                         KeyCode::Backspace => app.on_backspace()?,
-                        _ => {}
+                        _ => false,
                     }
+                } else {
+                    false
                 }
             } else {
-                match rx.recv()? {
-                    Event::Input(event) => match event.code {
-                        KeyCode::Char('q') => {
-                            disable_raw_mode()?;
-                            execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
-                            terminal.show_cursor()?;
-                            break;
-                        }
-                        KeyCode::Char('h') | KeyCode::F(1) => {
-                            app.show_help();
-                        }
-                        KeyCode::Char('m') => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                            _ => {
-                                if let Err(err) = app.select_model() {
-                                    app.set_error(err);
-                                }
+                match next_event() {
+                    Event::Input(event) => {
+                        let now = Instant::now();
+                        if event.code == last_key {
+                            let duration =
+                                (now.saturating_duration_since(last_key_time)).as_millis();
+                            if duration < key_repeat_time && 2 * duration > MIN_KEY_REPEAT_TIME {
+                                key_repeat_time = duration;
                             }
-                        },
-                        KeyCode::Char('r') => {
-                            app = app.reload(&settings, max_commits)?;
+                        } else {
+                            last_key = event.code;
                         }
-                        KeyCode::Char('l') => {
-                            if event.modifiers.contains(KeyModifiers::CONTROL) {
-                                app.toggle_line_numbers()?;
-                            } else {
-                                app.toggle_layout();
-                            }
-                        }
-                        KeyCode::Char('b') => {
-                            app.toggle_branches();
-                        }
-                        KeyCode::Char('o') => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                            _ => {
-                                if event.modifiers.contains(KeyModifiers::CONTROL) {
-                                    if let Some(graph) = &app.graph_state.graph {
-                                        let path = graph.repository.path();
-                                        let path = path.parent().unwrap_or(path);
-                                        file_dialog.location =
-                                            PathBuf::from(path.parent().unwrap_or(path));
-                                        file_dialog.selection = Some(PathBuf::from(path));
-                                    } else {
-                                        file_dialog.location = std::env::current_dir()?;
-                                        file_dialog.selection = None
-                                    }
-                                    open_file = true;
-                                } else {
-                                    app.set_diff_mode(DiffMode::Old)?;
-                                }
-                            }
-                        },
-                        KeyCode::Char('f') if event.modifiers.contains(KeyModifiers::CONTROL) => {
-                            match app.active_view {
-                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                                _ => app.open_search(),
-                            }
-                        }
-                        KeyCode::F(3) => match app.active_view {
-                            ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
-                            _ => {
-                                if app.search_term.is_none() {
-                                    app.open_search()
-                                } else {
-                                    app.search()?
-                                }
-                            }
-                        },
-                        KeyCode::Char('n') => {
-                            app.set_diff_mode(DiffMode::New)?;
-                        }
-                        KeyCode::Char('d') => {
-                            app.set_diff_mode(DiffMode::Diff)?;
-                        }
-                        KeyCode::Char('p') => {
-                            if app.active_view == ActiveView::Models {
-                                let (a, s, result) =
-                                    set_app_model(app, settings, max_commits, true)?;
-                                app = a;
-                                settings = s;
-                                if let Err(err) = result {
-                                    app.set_error(err);
-                                    app.active_view = ActiveView::Graph;
-                                }
-                            }
-                        }
-                        KeyCode::Char('+') => app.on_plus()?,
-                        KeyCode::Char('-') => app.on_minus()?,
+                        last_key_time = now;
 
-                        KeyCode::Up => app.on_up(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        )?,
-                        KeyCode::Down => app.on_down(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        )?,
-                        KeyCode::Home => app.on_home()?,
-                        KeyCode::End => app.on_end()?,
-                        KeyCode::Left => app.on_left(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        ),
-                        KeyCode::Right => app.on_right(
-                            event.modifiers.contains(KeyModifiers::SHIFT),
-                            event.modifiers.contains(KeyModifiers::CONTROL),
-                        )?,
-                        KeyCode::Tab => app.on_tab(),
-                        KeyCode::Esc => app.on_esc()?,
-                        KeyCode::Enter => {
-                            if app.active_view == ActiveView::Models {
-                                let (a, s, result) =
-                                    set_app_model(app, settings, max_commits, true)?;
-                                app = a;
-                                settings = s;
-                                if let Err(err) = result {
-                                    app.set_error(err);
-                                    app.active_view = ActiveView::Graph;
+                        match event.code {
+                            KeyCode::Char('q') => {
+                                disable_raw_mode()?;
+                                execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
+                                terminal.show_cursor()?;
+                                break;
+                            }
+                            KeyCode::Char('h') | KeyCode::F(1) => {
+                                app.show_help();
+                                false
+                            }
+                            KeyCode::Char('m') => {
+                                match app.active_view {
+                                    ActiveView::Models
+                                    | ActiveView::Search
+                                    | ActiveView::Help(_) => {}
+                                    _ => {
+                                        if let Err(err) = app.select_model() {
+                                            app.set_error(err);
+                                        }
+                                    }
                                 }
-                            } else {
-                                app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                                false
                             }
-                        }
-                        KeyCode::Backspace => {
-                            if app.active_view != ActiveView::Models {
-                                app.on_backspace()?
+                            KeyCode::Char('r') => {
+                                app = app.reload(&settings, max_commits)?;
+                                false
                             }
-                        }
-                        _ => {}
-                    },
-                    Event::Update => {
-                        if app.graph_state.graph.is_some() && has_changed(&mut app)? {
-                            app = app.reload(&settings, max_commits)?;
+                            KeyCode::Char('l') => {
+                                if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                    app.toggle_line_numbers()?;
+                                } else {
+                                    app.toggle_layout();
+                                }
+                                false
+                            }
+                            KeyCode::Char('b') => {
+                                app.toggle_branches();
+                                false
+                            }
+                            KeyCode::Char('o') => {
+                                match app.active_view {
+                                    ActiveView::Models
+                                    | ActiveView::Search
+                                    | ActiveView::Help(_) => {}
+                                    _ => {
+                                        if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                            if let Some(graph) = &app.graph_state.graph {
+                                                let path = graph.repository.path();
+                                                let path = path.parent().unwrap_or(path);
+                                                file_dialog.location =
+                                                    PathBuf::from(path.parent().unwrap_or(path));
+                                                file_dialog.selection = Some(PathBuf::from(path));
+                                            } else {
+                                                file_dialog.location = std::env::current_dir()?;
+                                                file_dialog.selection = None
+                                            }
+                                            open_file = true;
+                                        } else {
+                                            app.set_diff_mode(DiffMode::Old)?;
+                                        }
+                                    }
+                                }
+                                false
+                            }
+                            KeyCode::Char('f')
+                                if event.modifiers.contains(KeyModifiers::CONTROL) =>
+                            {
+                                match app.active_view {
+                                    ActiveView::Models
+                                    | ActiveView::Search
+                                    | ActiveView::Help(_) => {}
+                                    _ => app.open_search(),
+                                }
+                                false
+                            }
+                            KeyCode::F(3) => match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {
+                                    false
+                                }
+                                _ => {
+                                    if app.search_term.is_none() {
+                                        app.open_search();
+                                        false
+                                    } else {
+                                        app.search()?
+                                    }
+                                }
+                            },
+                            KeyCode::Char('n') => {
+                                app.set_diff_mode(DiffMode::New)?;
+                                false
+                            }
+                            KeyCode::Char('d') => {
+                                app.set_diff_mode(DiffMode::Diff)?;
+                                false
+                            }
+                            KeyCode::Char('p') => {
+                                if app.active_view == ActiveView::Models {
+                                    let (a, s, result) =
+                                        set_app_model(app, settings, max_commits, true)?;
+                                    app = a;
+                                    settings = s;
+                                    if let Err(err) = result {
+                                        app.set_error(err);
+                                        app.active_view = ActiveView::Graph;
+                                    }
+                                }
+                                false
+                            }
+                            KeyCode::Char('+') => {
+                                app.on_plus()?;
+                                false
+                            }
+                            KeyCode::Char('-') => {
+                                app.on_minus()?;
+                                false
+                            }
+
+                            KeyCode::Up => app.on_up(
+                                event.modifiers.contains(KeyModifiers::SHIFT),
+                                event.modifiers.contains(KeyModifiers::CONTROL),
+                            )?,
+                            KeyCode::Down => app.on_down(
+                                event.modifiers.contains(KeyModifiers::SHIFT),
+                                event.modifiers.contains(KeyModifiers::CONTROL),
+                            )?,
+                            KeyCode::Home => app.on_home()?,
+                            KeyCode::End => app.on_end()?,
+                            KeyCode::Left => {
+                                app.on_left(
+                                    event.modifiers.contains(KeyModifiers::SHIFT),
+                                    event.modifiers.contains(KeyModifiers::CONTROL),
+                                );
+                                false
+                            }
+                            KeyCode::Right => {
+                                app.on_right(
+                                    event.modifiers.contains(KeyModifiers::SHIFT),
+                                    event.modifiers.contains(KeyModifiers::CONTROL),
+                                )?;
+                                false
+                            }
+                            KeyCode::Tab => {
+                                app.on_tab();
+                                false
+                            }
+                            KeyCode::Esc => {
+                                app.on_esc()?;
+                                false
+                            }
+                            KeyCode::Enter => {
+                                if app.active_view == ActiveView::Models {
+                                    let (a, s, result) =
+                                        set_app_model(app, settings, max_commits, true)?;
+                                    app = a;
+                                    settings = s;
+                                    if let Err(err) = result {
+                                        app.set_error(err);
+                                        app.active_view = ActiveView::Graph;
+                                    }
+                                    false
+                                } else {
+                                    app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                                }
+                            }
+                            KeyCode::Backspace => {
+                                if app.active_view != ActiveView::Models {
+                                    app.on_backspace()?
+                                } else {
+                                    false
+                                }
+                            }
+                            _ => false,
                         }
                     }
-                    Event::Tick => {}
+                    Event::Update => {
+                        let now = Instant::now();
+                        if next_repo_refresh.get() <= now {
+                            if app.graph_state.graph.is_some() && has_changed(&mut app)? {
+                                app = app.reload(&settings, max_commits)?;
+                            }
+                            next_repo_refresh.set(now + repo_refresh_interval);
+                        }
+                        if let Some(next) = next_diff_update.get() {
+                            if next <= now {
+                                app.reload_diff_files()?;
+                                next_diff_update.set(None);
+                            }
+                        }
+                        false
+                    }
                 }
+            };
+            if reload_diffs {
+                app.reload_diff_message()?;
+                next_diff_update.set(Some(
+                    Instant::now() + Duration::from_millis(2 * key_repeat_time as u64),
+                ));
             }
             if app.should_quit {
                 break;
@@ -563,7 +657,7 @@ fn run(
 
             let mut app = None;
             if file_dialog.error_message.is_some() {
-                if let Event::Input(event) = rx.recv()? {
+                if let Event::Input(event) = next_event() {
                     match event.code {
                         KeyCode::Enter | KeyCode::Esc => {
                             file_dialog.clear_error();
@@ -577,7 +671,7 @@ fn run(
                         _ => {}
                     }
                 }
-            } else if let Event::Input(event) = rx.recv()? {
+            } else if let Event::Input(event) = next_event() {
                 match event.code {
                     KeyCode::Char('q') => {
                         disable_raw_mode()?;
@@ -622,7 +716,7 @@ fn run(
                 };
             }
             app
-        }
+        };
     }
 
     Ok(())

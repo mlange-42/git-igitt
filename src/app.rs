@@ -219,7 +219,7 @@ impl App {
         }
     }
 
-    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -228,10 +228,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        self.selection_changed()?;
+                        return Ok(true);
                     }
                 } else if self.graph_state.move_selection(step, false) {
-                    self.selection_changed()?;
+                    return Ok(true);
                 }
             }
             ActiveView::Branches => {
@@ -268,10 +268,10 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -280,10 +280,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        self.selection_changed()?;
+                        return Ok(true);
                     }
                 } else if self.graph_state.move_selection(step, true) {
-                    self.selection_changed()?;
+                    return Ok(true);
                 }
             }
             ActiveView::Branches => {
@@ -320,32 +320,32 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_home(&mut self) -> Result<(), String> {
+    pub fn on_home(&mut self) -> Result<bool, String> {
         if let ActiveView::Graph = self.active_view {
             if let Some(graph) = &self.graph_state.graph {
                 if let Some(index) = graph.indices.get(&graph.head.oid) {
                     self.graph_state.selected = Some(*index);
-                    self.selection_changed()?;
+                    return Ok(true);
                 } else if !self.graph_state.graph_lines.is_empty() {
                     self.graph_state.selected = Some(0);
-                    self.selection_changed()?;
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_end(&mut self) -> Result<(), String> {
+    pub fn on_end(&mut self) -> Result<bool, String> {
         if let ActiveView::Graph = self.active_view {
             if !self.graph_state.indices.is_empty() {
                 self.graph_state.selected = Some(self.graph_state.indices.len() - 1);
-                self.selection_changed()?;
+                return Ok(true);
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
@@ -436,7 +436,7 @@ impl App {
         }
     }
 
-    pub fn on_enter(&mut self, is_control: bool) -> Result<(), String> {
+    pub fn on_enter(&mut self, is_control: bool) -> Result<bool, String> {
         match &self.active_view {
             ActiveView::Help(_) => {
                 self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph)
@@ -457,12 +457,12 @@ impl App {
                                     if self.graph_state.selected.is_some() {
                                         self.graph_state.secondary_selected = Some(commit_idx);
                                         self.graph_state.secondary_changed = true;
-                                        self.selection_changed()?;
+                                        return Ok(true);
                                     }
                                 } else {
                                     self.graph_state.selected = Some(commit_idx);
                                     self.graph_state.secondary_changed = false;
-                                    self.selection_changed()?;
+                                    return Ok(true);
                                 }
                             }
                         }
@@ -471,10 +471,10 @@ impl App {
             }
             _ => {}
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_backspace(&mut self) -> Result<(), String> {
+    pub fn on_backspace(&mut self) -> Result<bool, String> {
         match &self.active_view {
             ActiveView::Help(_) | ActiveView::Models => {}
             ActiveView::Search => {
@@ -491,11 +491,11 @@ impl App {
                 if self.graph_state.secondary_selected.is_some() {
                     self.graph_state.secondary_selected = None;
                     self.graph_state.secondary_changed = false;
-                    self.selection_changed()?;
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn on_plus(&mut self) -> Result<(), String> {
@@ -564,18 +564,18 @@ impl App {
     }
     pub fn exit_search(&mut self, _abort: bool) {}
 
-    pub fn search(&mut self) -> Result<(), String> {
+    pub fn search(&mut self) -> Result<bool, String> {
         // TODO: remove once searching in diffs works
         self.active_view = ActiveView::Graph;
 
-        match &self.active_view {
+        let update = match &self.active_view {
             ActiveView::Branches | ActiveView::Graph | ActiveView::Commit => self.search_graph()?,
             ActiveView::Files | ActiveView::Diff => self.search_diff(),
-            _ => {}
-        }
-        Ok(())
+            _ => false,
+        };
+        Ok(update)
     }
-    fn search_graph(&mut self) -> Result<(), String> {
+    fn search_graph(&mut self) -> Result<bool, String> {
         if let Some(search) = &self.search_term {
             let term = search.to_lowercase();
 
@@ -587,19 +587,17 @@ impl App {
             for idx in search_start..self.graph_state.indices.len() {
                 if self.commit_contains(idx, &term) {
                     self.graph_state.selected = Some(idx);
-                    self.selection_changed()?;
-                    return Ok(());
+                    return Ok(true);
                 }
             }
             for idx in 0..search_start {
                 if self.commit_contains(idx, &term) {
                     self.graph_state.selected = Some(idx);
-                    self.selection_changed()?;
-                    return Ok(());
+                    return Ok(true);
                 }
             }
         }
-        Ok(())
+        Ok(false)
     }
 
     fn commit_contains(&self, commit_idx: usize, term: &str) -> bool {
@@ -621,8 +619,9 @@ impl App {
         false
     }
 
-    fn search_diff(&mut self) {
+    fn search_diff(&mut self) -> bool {
         // TODO implement search in diff panel
+        false
     }
 
     pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {
@@ -676,7 +675,12 @@ impl App {
         Ok(())
     }
 
-    fn selection_changed(&mut self) -> Result<(), String> {
+    pub fn selection_changed(&mut self) -> Result<(), String> {
+        self.reload_diff_message()?;
+        self.reload_diff_files()
+    }
+
+    pub fn reload_diff_message(&mut self) -> Result<(), String> {
         if let Some(graph) = &self.graph_state.graph {
             self.commit_state.content =
                 if let Some((info, idx)) = self.graph_state.selected.and_then(move |sel_idx| {
@@ -715,17 +719,43 @@ impl App {
                     };
                     let comp_oid = compare_to.as_ref().map(|c| c.id());
 
-                    let diffs = get_diff_files(&graph, compare_to.as_ref(), &commit)?;
-
                     Some(CommitViewInfo::new(
                         message_fmt,
-                        StatefulList::with_items(diffs),
+                        StatefulList::default(),
                         info.oid,
                         comp_oid.unwrap_or_else(Oid::zero),
                     ))
                 } else {
                     None
                 }
+        }
+        self.file_changed()?;
+        Ok(())
+    }
+
+    pub fn reload_diff_files(&mut self) -> Result<(), String> {
+        if let Some(graph) = &self.graph_state.graph {
+            if let Some(content) = &mut self.commit_state.content {
+                let commit = graph
+                    .repository
+                    .find_commit(content.oid)
+                    .map_err(|err| err.message().to_string())?;
+
+                let compare_to = if content.compare_oid.is_zero() {
+                    None
+                } else {
+                    Some(
+                        graph
+                            .repository
+                            .find_commit(content.compare_oid)
+                            .map_err(|err| err.message().to_string())?,
+                    )
+                };
+
+                let diffs = get_diff_files(&graph, compare_to.as_ref(), &commit)?;
+
+                content.diffs = StatefulList::with_items(diffs)
+            }
         }
         self.file_changed()?;
         Ok(())

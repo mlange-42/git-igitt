@@ -48,7 +48,7 @@ impl GraphViewState {
                 std::cmp::max(sel.saturating_sub(steps), 0)
             };
             self.selected = Some(new_idx);
-            true
+            new_idx != sel
         } else if !self.graph_lines.is_empty() {
             self.selected = Some(0);
             true
@@ -68,7 +68,7 @@ impl GraphViewState {
                 std::cmp::max(sel.saturating_sub(steps), 0)
             };
             self.secondary_selected = Some(new_idx);
-            true
+            new_idx != sel
         } else if !self.graph_lines.is_empty() {
             if let Some(sel) = self.selected {
                 let new_idx = if down {
@@ -76,12 +76,8 @@ impl GraphViewState {
                 } else {
                     std::cmp::max(sel.saturating_sub(steps), 0)
                 };
-                if new_idx != sel {
-                    self.secondary_selected = Some(new_idx);
-                    true
-                } else {
-                    false
-                }
+                self.secondary_selected = Some(new_idx);
+                new_idx != sel
             } else {
                 false
             }
