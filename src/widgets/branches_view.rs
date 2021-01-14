@@ -6,6 +6,9 @@ use tui::text::Span;
 use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
+const SCROLL_MARGIN: usize = 2;
+const SCROLLBAR_STR: &str = "\u{2588}";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum BranchItemType {
     LocalBranch,
@@ -42,10 +45,6 @@ impl<'a> BranchListItem<'a> {
     pub fn style(mut self, style: Style) -> BranchListItem<'a> {
         self.style = style;
         self
-    }
-
-    pub fn height(&self) -> usize {
-        1
     }
 }
 
@@ -156,32 +155,26 @@ impl<'a> StatefulWidget for BranchList<'a> {
         let list_height = list_area.height as usize;
 
         let mut start = state.offset;
-        let mut end = state.offset;
-        let mut height = 0;
-        for item in self.items.iter().skip(state.offset) {
-            if height + item.height() > list_height {
-                break;
-            }
-            height += item.height();
-            end += 1;
-        }
+        let height = std::cmp::min(
+            list_height as usize,
+            self.items.len().saturating_sub(state.offset),
+        );
+        let mut end = start + height;
 
         let selected = state.selected.unwrap_or(0).min(self.items.len() - 1);
-        while selected >= end {
-            height = height.saturating_add(self.items[end].height());
-            end += 1;
-            while height > list_height {
-                height = height.saturating_sub(self.items[start].height());
-                start += 1;
-            }
+
+        let move_to_end = (selected + SCROLL_MARGIN).min(self.items.len() - 1);
+        let move_to_start = selected.saturating_sub(SCROLL_MARGIN);
+
+        if move_to_end >= end {
+            let diff = move_to_end + 1 - end;
+            end += diff;
+            start += diff;
         }
-        while selected < start {
-            start -= 1;
-            height = height.saturating_add(self.items[start].height());
-            while height > list_height {
-                end -= 1;
-                height = height.saturating_sub(self.items[end].height());
-            }
+        if move_to_start < start {
+            let diff = start - move_to_start;
+            end -= diff;
+            start -= diff;
         }
         state.offset = start;
 
@@ -201,12 +194,12 @@ impl<'a> StatefulWidget for BranchList<'a> {
         {
             let (x, y) = match self.start_corner {
                 Corner::BottomLeft => {
-                    current_height += item.height() as u16;
+                    current_height += 1;
                     (list_area.left(), list_area.bottom() - current_height)
                 }
                 _ => {
                     let pos = (list_area.left(), list_area.top() + current_height);
-                    current_height += item.height() as u16;
+                    current_height += 1;
                     pos
                 }
             };
@@ -214,7 +207,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
                 x,
                 y,
                 width: list_area.width,
-                height: item.height() as u16,
+                height: 1,
             };
             let item_style = self.style.patch(item.style);
             buf.set_style(area, item_style);
@@ -261,6 +254,25 @@ impl<'a> StatefulWidget for BranchList<'a> {
         }
         if state.scroll_x > max_scroll as u16 {
             state.scroll_x = max_scroll as u16;
+        }
+
+        let scroll_start = list_area.top() as usize
+            + (((list_height * start) as f32 / self.items.len() as f32).ceil() as usize)
+                .min(list_height - 1);
+        let scroll_height = (((list_height * list_height) as f32 / self.items.len() as f32).floor()
+            as usize)
+            .max(1)
+            .min(list_height);
+
+        if scroll_height < list_height {
+            for y in scroll_start..(scroll_start + scroll_height) {
+                buf.set_string(
+                    list_area.left() + list_area.width,
+                    y as u16,
+                    SCROLLBAR_STR,
+                    self.style,
+                );
+            }
         }
     }
 }

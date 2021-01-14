@@ -7,6 +7,7 @@ use tui::widgets::{Block, StatefulWidget, Widget};
 use unicode_width::UnicodeWidthStr;
 
 const SCROLL_MARGIN: usize = 2;
+const SCROLLBAR_STR: &str = "\u{2588}";
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct FileListItem<'a> {
@@ -216,6 +217,25 @@ impl<'a> StatefulWidget for FileList<'a> {
         }
         if state.scroll_x > max_scroll as u16 {
             state.scroll_x = max_scroll as u16;
+        }
+
+        let scroll_start = list_area.top() as usize
+            + (((list_height * start) as f32 / self.items.len() as f32).ceil() as usize)
+                .min(list_height - 1);
+        let scroll_height = (((list_height * list_height) as f32 / self.items.len() as f32).floor()
+            as usize)
+            .max(1)
+            .min(list_height);
+
+        if scroll_height < list_height {
+            for y in scroll_start..(scroll_start + scroll_height) {
+                buf.set_string(
+                    list_area.left() + list_area.width,
+                    y as u16,
+                    SCROLLBAR_STR,
+                    self.style,
+                );
+            }
         }
     }
 }
