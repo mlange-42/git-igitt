@@ -457,11 +457,17 @@ impl App {
                                     if self.graph_state.selected.is_some() {
                                         self.graph_state.secondary_selected = Some(commit_idx);
                                         self.graph_state.secondary_changed = true;
+                                        if self.is_fullscreen {
+                                            self.active_view = ActiveView::Graph;
+                                        }
                                         return Ok(true);
                                     }
                                 } else {
                                     self.graph_state.selected = Some(commit_idx);
                                     self.graph_state.secondary_changed = false;
+                                    if self.is_fullscreen {
+                                        self.active_view = ActiveView::Graph;
+                                    }
                                     return Ok(true);
                                 }
                             }
