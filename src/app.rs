@@ -1,3 +1,4 @@
+use crate::util::syntax_highlight::highlight;
 use crate::widgets::branches_view::{BranchItem, BranchItemType};
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState, DiffItem};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
@@ -45,6 +46,8 @@ pub enum DiffMode {
 pub struct DiffOptions {
     pub context_lines: u32,
     pub diff_mode: DiffMode,
+    pub line_numbers: bool,
+    pub syntax_highlight: bool,
 }
 
 impl Default for DiffOptions {
@@ -52,6 +55,8 @@ impl Default for DiffOptions {
         Self {
             context_lines: 3,
             diff_mode: DiffMode::Diff,
+            line_numbers: true,
+            syntax_highlight: true,
         }
     }
 }
@@ -111,7 +116,6 @@ pub struct App {
     pub horizontal_split: bool,
     pub show_branches: bool,
     pub color: bool,
-    pub line_numbers: bool,
     pub should_quit: bool,
     pub models_path: PathBuf,
     pub error_message: Option<String>,
@@ -135,7 +139,6 @@ impl App {
             horizontal_split: true,
             show_branches: false,
             color: true,
-            line_numbers: true,
             should_quit: false,
             models_path,
             error_message: None,
@@ -250,7 +253,7 @@ impl App {
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
                     content.diffs.bwd(step);
-                    self.file_changed()?;
+                    self.file_changed(true)?;
                 }
             }
             ActiveView::Diff => {
@@ -302,7 +305,7 @@ impl App {
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
                     content.diffs.fwd(step);
-                    self.file_changed()?;
+                    self.file_changed(true)?;
                 }
             }
             ActiveView::Diff => {
@@ -382,7 +385,7 @@ impl App {
                     if let Some(commit) = &mut self.commit_state.content {
                         if commit.diffs.state.selected.is_none() && !commit.diffs.items.is_empty() {
                             commit.diffs.state.selected = Some(0);
-                            self.file_changed()?
+                            self.file_changed(true)?
                         }
                     }
                     ActiveView::Files
@@ -507,7 +510,7 @@ impl App {
     pub fn on_plus(&mut self) -> Result<(), String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_add(1);
-            self.file_changed()?;
+            self.file_changed(false)?;
         }
         Ok(())
     }
@@ -515,7 +518,7 @@ impl App {
     pub fn on_minus(&mut self) -> Result<(), String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_sub(1);
-            self.file_changed()?;
+            self.file_changed(false)?;
         }
         Ok(())
     }
@@ -540,7 +543,7 @@ impl App {
                     content.diffs.state.scroll_x = 0;
                 }
                 self.diff_options.diff_mode = DiffMode::Diff;
-                self.file_changed()?;
+                self.file_changed(true)?;
             }
         }
 
@@ -633,15 +636,23 @@ impl App {
     pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.diff_mode = mode;
-            self.file_changed()?;
+            self.file_changed(false)?;
         }
         Ok(())
     }
 
     pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
-            self.line_numbers = !self.line_numbers;
-            self.file_changed()?;
+            self.diff_options.line_numbers = !self.diff_options.line_numbers;
+            self.file_changed(false)?;
+        }
+        Ok(())
+    }
+
+    pub fn toggle_syntax_highlight(&mut self) -> Result<(), String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.syntax_highlight = !self.diff_options.syntax_highlight;
+            self.file_changed(false)?;
         }
         Ok(())
     }
@@ -735,7 +746,7 @@ impl App {
                     None
                 }
         }
-        self.file_changed()?;
+        //self.file_changed(true)?;
         Ok(())
     }
 
@@ -763,11 +774,11 @@ impl App {
                 content.diffs = StatefulList::with_items(diffs)
             }
         }
-        self.file_changed()?;
+        self.file_changed(true)?;
         Ok(())
     }
 
-    fn file_changed(&mut self) -> Result<(), String> {
+    fn file_changed(&mut self, reset_scroll: bool) -> Result<(), String> {
         if let (Some(graph), Some(state)) = (&self.graph_state.graph, &self.commit_state.content) {
             self.diff_state.content = if let Some((info, sel_index)) = self
                 .graph_state
@@ -812,11 +823,32 @@ impl App {
                     &self.diff_options,
                 )?;
 
-                Some(DiffViewInfo::new(
+                let highlighted = if self.color
+                    && self.diff_options.syntax_highlight
+                    && self.diff_options.diff_mode != DiffMode::Diff
+                    && diffs.len() == 2
+                {
+                    PathBuf::from(&selection.file)
+                        .extension()
+                        .and_then(|ext| ext.to_str().and_then(|ext| highlight(&diffs[1].0, ext)))
+                } else {
+                    None
+                };
+
+                let mut info = DiffViewInfo::new(
                     diffs,
+                    highlighted,
                     info.oid,
                     comp_oid.unwrap_or_else(Oid::zero),
-                ))
+                );
+
+                if !reset_scroll {
+                    if let Some(diff_state) = &self.diff_state.content {
+                        info.scroll = diff_state.scroll;
+                    }
+                }
+
+                Some(info)
             } else {
                 None
             }
@@ -977,7 +1009,6 @@ fn get_file_diffs(
                 ))
             }
         };
-        //.map_err(|err| err.message().to_string())?;
     }
     diff_error?;
     Ok(diffs)

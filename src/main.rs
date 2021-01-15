@@ -444,7 +444,15 @@ fn run(
                                 terminal.show_cursor()?;
                                 break;
                             }
-                            KeyCode::Char('h') | KeyCode::F(1) => {
+                            KeyCode::Char('s') => {
+                                app.toggle_syntax_highlight()?;
+                                false
+                            }
+                            KeyCode::Char('h') => {
+                                app.show_help();
+                                false
+                            }
+                            KeyCode::F(1) => {
                                 app.show_help();
                                 false
                             }

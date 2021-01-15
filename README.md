@@ -21,6 +21,7 @@ Decide for yourself which graph is the most comprehensible. :sunglasses:
 * View structured graphs directly in the terminal
 * Interactively browse the Git history and view commits and diffs
 * Pre-defined and custom branching models and coloring
+* Syntax highlighting for diffs (when viewing old/new file version)
 
 ## Installation
 
@@ -106,6 +107,7 @@ For details on **how to create your own branching models** see section
 * Currently, the history can only be browsed. So far, no Git commands are implemented.
 * Supports only the primary remote repository `origin`.
 * Does currently not support "octopus merges" (i.e. no more than 2 parents)
+* Syntax highlighting may be slow for large files (turn on/off with by typing `S`).
 
 ## Contributing
 
