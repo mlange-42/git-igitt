@@ -420,7 +420,12 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                 if let Some(txt) = &state.highlighted {
                     text.extend(as_styled(txt));
                 } else {
-                    text.extend(style_diff_line(None, &state.diffs[1].0, &styles, app.color));
+                    // TODO: Due to a bug in tui-rs (?), it is necessary to trim line ends.
+                    // Otherwise, artifacts of the previous buffer may occur
+                    for line in state.diffs[1].0.lines() {
+                        let styled = style_diff_line(None, line.trim_end(), &styles, app.color);
+                        text.extend(styled);
+                    }
                 }
             }
         }

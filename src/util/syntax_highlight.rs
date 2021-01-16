@@ -2,13 +2,12 @@ use lazy_static::lazy_static;
 use syntect::easy::HighlightLines;
 use syntect::highlighting::{Style, ThemeSet};
 use syntect::parsing::SyntaxSet;
-use syntect::util::LinesWithEndings;
 use tui::style::Color;
 use tui::text::{Span, Spans, Text};
 
 lazy_static! {
     static ref SYNTAX: Syntax = Syntax {
-        syntax: SyntaxSet::load_defaults_newlines(),
+        syntax: SyntaxSet::load_defaults_nonewlines(),
         themes: ThemeSet::load_defaults()
     };
 }
@@ -26,9 +25,12 @@ pub fn highlight(lines: &str, extension: &str) -> Option<Vec<Vec<(Style, String)
 
     let mut h = HighlightLines::new(syntax, &SYNTAX.themes.themes["Solarized (dark)"]);
 
-    let spans: Vec<_> = LinesWithEndings::from(lines)
+    // TODO: Due to a bug in tui-rs (?), it is necessary to trim line ends.
+    // Otherwise, artifacts of the previous buffer may occur
+    let spans: Vec<_> = lines
+        .lines()
         .map(|line| {
-            h.highlight(&line, &SYNTAX.syntax)
+            h.highlight(&line.trim_end(), &SYNTAX.syntax)
                 .into_iter()
                 .map(|(s, l)| (s, l.to_string()))
                 .collect::<Vec<_>>()
