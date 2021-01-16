@@ -1,6 +1,6 @@
 [package]
 name = "git-igitt"
-version = "0.1.11"
+version = "0.1.12"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
 edition = "2018"
 
