@@ -16,6 +16,7 @@ use git_graph::{
     },
 };
 use git_igitt::app::DiffMode;
+use git_igitt::settings::AppSettings;
 use git_igitt::{
     app::{ActiveView, App, CurrentBranches},
     dialogs::FileDialog,
@@ -151,6 +152,13 @@ fn from_args() -> Result<(), String> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("tab-width")
+                .long("tab-width")
+                .help("Tab width for display in diffs. Default: 4.")
+                .required(false)
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("format")
                 .long("format")
                 .short("f")
@@ -259,6 +267,18 @@ fn from_args() -> Result<(), String> {
             }
         },
     };
+    let tab_width = match matches.value_of("tab-width") {
+        None => None,
+        Some(str) => match str.parse::<usize>() {
+            Ok(val) => Some(val),
+            Err(_) => {
+                return Err(format![
+                    "Option tab-width must be a positive number, but got '{}'",
+                    str
+                ])
+            }
+        },
+    };
 
     let include_remote = !matches.is_present("local");
 
@@ -298,6 +318,8 @@ fn from_args() -> Result<(), String> {
         !cfg!(windows) || yansi::Paint::enable_windows_ascii()
     };
 
+    let app_settings = AppSettings::default().tab_width(tab_width.unwrap_or(4));
+
     let settings = Settings {
         debug: false,
         colored,
@@ -311,7 +333,8 @@ fn from_args() -> Result<(), String> {
         merge_patterns: MergePatterns::default(),
     };
 
-    run(repository.ok(), settings, model, commit_limit).map_err(|err| err.to_string())?;
+    run(repository.ok(), settings, app_settings, model, commit_limit)
+        .map_err(|err| err.to_string())?;
 
     Ok(())
 }
@@ -319,6 +342,7 @@ fn from_args() -> Result<(), String> {
 fn run(
     mut repository: Option<Repository>,
     mut settings: Settings,
+    app_settings: AppSettings,
     model: Option<&str>,
     max_commits: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
@@ -333,7 +357,13 @@ fn run(
     let repo_refresh_interval = Duration::from_millis(CHECK_CHANGE_RATE);
 
     let mut app = if let Some(repository) = repository.take() {
-        Some(create_app(repository, &mut settings, model, max_commits)?)
+        Some(create_app(
+            repository,
+            &mut settings,
+            &app_settings,
+            model,
+            max_commits,
+        )?)
     } else {
         None
     };
@@ -645,9 +675,7 @@ fn run(
                     Instant::now() + Duration::from_millis(2 * key_repeat_time as u64),
                 ));
             }
-            if app.should_quit {
-                break;
-            }
+
             if open_file {
                 let prev = if let Some(graph) = &app.graph_state.graph {
                     graph.repository.path().parent().map(PathBuf::from)
@@ -712,7 +740,13 @@ fn run(
                         if let Some(path) = &file_dialog.selection {
                             match get_repo(path) {
                                 Ok(repo) => {
-                                    app = Some(create_app(repo, &mut settings, model, max_commits)?)
+                                    app = Some(create_app(
+                                        repo,
+                                        &mut settings,
+                                        &app_settings,
+                                        model,
+                                        max_commits,
+                                    )?)
                                 }
                                 Err(_) => {
                                     file_dialog.on_right()?;
@@ -826,6 +860,7 @@ pub fn set_model<P: AsRef<Path>>(
 fn create_app(
     repository: Repository,
     settings: &mut Settings,
+    app_settings: &AppSettings,
     model: Option<&str>,
     max_commits: Option<usize>,
 ) -> Result<App, String> {
@@ -847,12 +882,15 @@ fn create_app(
     let branches = get_branches(&graph)?;
     let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
 
-    Ok(
-        App::new(format!("git-igitt - {}", name), name.clone(), models_dir)
-            .with_graph(graph, graph_lines, text_lines, indices, true)?
-            .with_branches(branches)
-            .with_color(settings.colored),
+    Ok(App::new(
+        app_settings.clone(),
+        format!("git-igitt - {}", name),
+        name.clone(),
+        models_dir,
     )
+    .with_graph(graph, graph_lines, text_lines, indices, true)?
+    .with_branches(branches)
+    .with_color(settings.colored))
 }
 
 fn has_changed(app: &mut App) -> Result<bool, String> {

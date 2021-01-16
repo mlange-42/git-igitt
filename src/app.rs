@@ -1,3 +1,4 @@
+use crate::settings::AppSettings;
 use crate::util::syntax_highlight::highlight;
 use crate::widgets::branches_view::{BranchItem, BranchItemType};
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState, DiffItem};
@@ -103,6 +104,7 @@ pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 pub type DiffLines = Vec<(String, Option<u32>, Option<u32>)>;
 
 pub struct App {
+    pub settings: AppSettings,
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
     pub diff_state: DiffViewState,
@@ -116,7 +118,6 @@ pub struct App {
     pub horizontal_split: bool,
     pub show_branches: bool,
     pub color: bool,
-    pub should_quit: bool,
     pub models_path: PathBuf,
     pub error_message: Option<String>,
     pub diff_options: DiffOptions,
@@ -124,8 +125,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(title: String, repo_name: String, models_path: PathBuf) -> App {
+    pub fn new(
+        settings: AppSettings,
+        title: String,
+        repo_name: String,
+        models_path: PathBuf,
+    ) -> App {
         App {
+            settings,
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
             diff_state: DiffViewState::default(),
@@ -139,7 +146,6 @@ impl App {
             horizontal_split: true,
             show_branches: false,
             color: true,
-            should_quit: false,
             models_path,
             error_message: None,
             diff_options: DiffOptions::default(),
@@ -821,6 +827,7 @@ impl App {
                     &commit,
                     &selection.file,
                     &self.diff_options,
+                    &self.settings.tab_spaces,
                 )?;
 
                 let highlighted = if self.color
@@ -916,10 +923,12 @@ fn get_file_diffs(
     new: &Commit,
     path: &str,
     options: &DiffOptions,
+    tab_spaces: &str,
 ) -> Result<DiffLines, String> {
     let mut diffs = vec![];
     let mut opts = GDiffOptions::new();
     opts.context_lines(options.context_lines);
+    opts.indent_heuristic(true);
     opts.pathspec(path);
     opts.disable_pathspec_match(true);
     let diff = graph
@@ -939,7 +948,11 @@ fn get_file_diffs(
     if options.diff_mode == DiffMode::Diff {
         diff.print(DiffFormat::Patch, |d, h, l| {
             match print_diff_line(&d, &h, &l) {
-                Ok(line) => diffs.push((line, l.old_lineno(), l.new_lineno())),
+                Ok(line) => diffs.push((
+                    line.replace("\t", tab_spaces),
+                    l.old_lineno(),
+                    l.new_lineno(),
+                )),
                 Err(err) => {
                     diff_error = Err(err);
                     return false;
@@ -961,7 +974,7 @@ fn get_file_diffs(
 
             let line = std::str::from_utf8(l.content())
                 .unwrap_or("Invalid UTF8 character.")
-                .to_string();
+                .replace("\t", tab_spaces);
             diffs.push((line, None, None));
 
             if blob_oid.is_zero() {
@@ -982,7 +995,7 @@ fn get_file_diffs(
                 let text = std::str::from_utf8(blob.content())
                     .map_err(|err| err.to_string())
                     .unwrap_or("Invalid UTF8 character.");
-                diffs.push((text.to_string(), None, None));
+                diffs.push((text.replace("\t", tab_spaces), None, None));
             }
             true
         }) {
