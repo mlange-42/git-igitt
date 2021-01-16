@@ -228,7 +228,7 @@ impl App {
         }
     }
 
-    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(bool, bool), String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -237,10 +237,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        return Ok(true);
+                        return Ok((true, false));
                     }
                 } else if self.graph_state.move_selection(step, false) {
-                    return Ok(true);
+                    return Ok((true, false));
                 }
             }
             ActiveView::Branches => {
@@ -258,8 +258,7 @@ impl App {
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.bwd(step);
-                    self.file_changed(true)?;
+                    return Ok((false, content.diffs.bwd(step)));
                 }
             }
             ActiveView::Diff => {
@@ -277,10 +276,10 @@ impl App {
             }
             _ => {}
         }
-        Ok(false)
+        Ok((false, false))
     }
 
-    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(bool, bool), String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -289,10 +288,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        return Ok(true);
+                        return Ok((true, false));
                     }
                 } else if self.graph_state.move_selection(step, true) {
-                    return Ok(true);
+                    return Ok((true, false));
                 }
             }
             ActiveView::Branches => {
@@ -310,8 +309,7 @@ impl App {
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.fwd(step);
-                    self.file_changed(true)?;
+                    return Ok((false, content.diffs.fwd(step)));
                 }
             }
             ActiveView::Diff => {
@@ -329,7 +327,7 @@ impl App {
             }
             _ => {}
         }
-        Ok(false)
+        Ok((false, false))
     }
 
     pub fn on_home(&mut self) -> Result<bool, String> {
@@ -357,7 +355,8 @@ impl App {
         Ok(false)
     }
 
-    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+        let mut reload_file_diff = false;
         if is_ctrl {
             let step = if is_shift { 15 } else { 3 };
             match self.active_view {
@@ -391,7 +390,7 @@ impl App {
                     if let Some(commit) = &mut self.commit_state.content {
                         if commit.diffs.state.selected.is_none() && !commit.diffs.items.is_empty() {
                             commit.diffs.state.selected = Some(0);
-                            self.file_changed(true)?
+                            reload_file_diff = true;
                         }
                     }
                     ActiveView::Files
@@ -403,7 +402,7 @@ impl App {
                 ActiveView::Search => ActiveView::Search,
             }
         }
-        Ok(())
+        Ok(reload_file_diff)
     }
     pub fn on_left(&mut self, is_shift: bool, is_ctrl: bool) {
         if is_ctrl {
@@ -513,27 +512,27 @@ impl App {
         Ok(false)
     }
 
-    pub fn on_plus(&mut self) -> Result<(), String> {
+    pub fn on_plus(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_add(1);
-            self.file_changed(false)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_minus(&mut self) -> Result<(), String> {
+    pub fn on_minus(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_sub(1);
-            self.file_changed(false)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn on_tab(&mut self) {
         self.is_fullscreen = !self.is_fullscreen;
     }
 
-    pub fn on_esc(&mut self) -> Result<(), String> {
+    pub fn on_esc(&mut self) -> Result<bool, String> {
         match self.active_view {
             ActiveView::Models | ActiveView::Help(_) => {
                 self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
@@ -549,11 +548,11 @@ impl App {
                     content.diffs.state.scroll_x = 0;
                 }
                 self.diff_options.diff_mode = DiffMode::Diff;
-                self.file_changed(true)?;
+                return Ok(true);
             }
         }
 
-        Ok(())
+        Ok(false)
     }
 
     pub fn character_entered(&mut self, c: char) {
@@ -639,28 +638,30 @@ impl App {
         false
     }
 
-    pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {
-        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+    pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<bool, String> {
+        if mode != self.diff_options.diff_mode
+            && (self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files)
+        {
             self.diff_options.diff_mode = mode;
-            self.file_changed(false)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
+    pub fn toggle_line_numbers(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.line_numbers = !self.diff_options.line_numbers;
-            self.file_changed(false)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn toggle_syntax_highlight(&mut self) -> Result<(), String> {
+    pub fn toggle_syntax_highlight(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.syntax_highlight = !self.diff_options.syntax_highlight;
-            self.file_changed(false)?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn toggle_layout(&mut self) {
@@ -700,7 +701,8 @@ impl App {
 
     pub fn selection_changed(&mut self) -> Result<(), String> {
         self.reload_diff_message()?;
-        self.reload_diff_files()
+        let _reload_file = self.reload_diff_files()?;
+        Ok(())
     }
 
     pub fn reload_diff_message(&mut self) -> Result<(), String> {
@@ -756,7 +758,7 @@ impl App {
         Ok(())
     }
 
-    pub fn reload_diff_files(&mut self) -> Result<(), String> {
+    pub fn reload_diff_files(&mut self) -> Result<bool, String> {
         if let Some(graph) = &self.graph_state.graph {
             if let Some(content) = &mut self.commit_state.content {
                 let commit = graph
@@ -780,11 +782,17 @@ impl App {
                 content.diffs = StatefulList::with_items(diffs)
             }
         }
-        self.file_changed(true)?;
-        Ok(())
+        Ok(true)
     }
 
-    fn file_changed(&mut self, reset_scroll: bool) -> Result<(), String> {
+    pub fn clear_file_diff(&mut self) {
+        if let Some(content) = &mut self.diff_state.content {
+            content.diffs.clear();
+            content.highlighted = None;
+        }
+    }
+
+    pub fn file_changed(&mut self, reset_scroll: bool) -> Result<(), String> {
         if let (Some(graph), Some(state)) = (&self.graph_state.graph, &self.commit_state.content) {
             self.diff_state.content = if let Some((info, sel_index)) = self
                 .graph_state

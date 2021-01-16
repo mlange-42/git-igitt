@@ -422,9 +422,11 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                 } else {
                     // TODO: Due to a bug in tui-rs (?), it is necessary to trim line ends.
                     // Otherwise, artifacts of the previous buffer may occur
-                    for line in state.diffs[1].0.lines() {
-                        let styled = style_diff_line(None, line.trim_end(), &styles, app.color);
-                        text.extend(styled);
+                    if state.diffs.len() > 1 {
+                        for line in state.diffs[1].0.lines() {
+                            let styled = style_diff_line(None, line.trim_end(), &styles, app.color);
+                            text.extend(styled);
+                        }
                     }
                 }
             }

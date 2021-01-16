@@ -84,33 +84,39 @@ impl<T: ListItem> StatefulList<T> {
         }
     }
 
-    pub fn fwd(&mut self, steps: usize) {
+    pub fn fwd(&mut self, steps: usize) -> bool {
         match self.state.selected() {
-            Some(_) => {
+            Some(sel) => {
                 for _ in 0..steps {
                     if !self.next() {
                         break;
                     }
                 }
+                if let Some(new_sel) = self.state.selected() {
+                    sel != new_sel
+                } else {
+                    true
+                }
             }
-            None => {
-                self.next();
-            }
+            None => self.next(),
         }
     }
 
-    pub fn bwd(&mut self, steps: usize) {
+    pub fn bwd(&mut self, steps: usize) -> bool {
         match self.state.selected() {
-            Some(_) => {
+            Some(sel) => {
                 for _ in 0..steps {
                     if !self.previous() {
                         break;
                     }
                 }
+                if let Some(new_sel) = self.state.selected() {
+                    sel != new_sel
+                } else {
+                    true
+                }
             }
-            None => {
-                self.next();
-            }
+            None => self.next(),
         }
     }
 
