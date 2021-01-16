@@ -16,6 +16,7 @@ use git_graph::{
     },
 };
 use git_igitt::app::DiffMode;
+use git_igitt::settings::AppSettings;
 use git_igitt::{
     app::{ActiveView, App, CurrentBranches},
     dialogs::FileDialog,
@@ -151,6 +152,13 @@ fn from_args() -> Result<(), String> {
                 .takes_value(true),
         )
         .arg(
+            Arg::with_name("tab-width")
+                .long("tab-width")
+                .help("Tab width for display in diffs. Default: 4.")
+                .required(false)
+                .takes_value(true),
+        )
+        .arg(
             Arg::with_name("format")
                 .long("format")
                 .short("f")
@@ -259,6 +267,18 @@ fn from_args() -> Result<(), String> {
             }
         },
     };
+    let tab_width = match matches.value_of("tab-width") {
+        None => None,
+        Some(str) => match str.parse::<usize>() {
+            Ok(val) => Some(val),
+            Err(_) => {
+                return Err(format![
+                    "Option tab-width must be a positive number, but got '{}'",
+                    str
+                ])
+            }
+        },
+    };
 
     let include_remote = !matches.is_present("local");
 
@@ -298,6 +318,8 @@ fn from_args() -> Result<(), String> {
         !cfg!(windows) || yansi::Paint::enable_windows_ascii()
     };
 
+    let app_settings = AppSettings::default().tab_width(tab_width.unwrap_or(4));
+
     let settings = Settings {
         debug: false,
         colored,
@@ -311,7 +333,8 @@ fn from_args() -> Result<(), String> {
         merge_patterns: MergePatterns::default(),
     };
 
-    run(repository.ok(), settings, model, commit_limit).map_err(|err| err.to_string())?;
+    run(repository.ok(), settings, app_settings, model, commit_limit)
+        .map_err(|err| err.to_string())?;
 
     Ok(())
 }
@@ -319,6 +342,7 @@ fn from_args() -> Result<(), String> {
 fn run(
     mut repository: Option<Repository>,
     mut settings: Settings,
+    app_settings: AppSettings,
     model: Option<&str>,
     max_commits: Option<usize>,
 ) -> Result<(), Box<dyn Error>> {
@@ -333,7 +357,13 @@ fn run(
     let repo_refresh_interval = Duration::from_millis(CHECK_CHANGE_RATE);
 
     let mut app = if let Some(repository) = repository.take() {
-        Some(create_app(repository, &mut settings, model, max_commits)?)
+        Some(create_app(
+            repository,
+            &mut settings,
+            &app_settings,
+            model,
+            max_commits,
+        )?)
     } else {
         None
     };
@@ -342,22 +372,26 @@ fn run(
         FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
     file_dialog.selection_changed(None)?;
 
-    let next_diff_update: &Cell<Option<Instant>> = &Cell::new(None);
     let next_repo_refresh = &Cell::new(Instant::now() + repo_refresh_interval);
+    let next_diff_update: &Cell<Option<Instant>> = &Cell::new(None);
+    let next_file_update: &Cell<Option<Instant>> = &Cell::new(None);
+    let mut reset_diff_scroll = false;
 
     let mut next_event = {
         let mut sx_old = 0;
         let mut sy_old = 0;
 
         move || loop {
-            let timeout = if let Some(next) = next_diff_update.get() {
-                next.min(next_repo_refresh.get())
-                    .saturating_duration_since(Instant::now())
-            } else {
-                next_repo_refresh
-                    .get()
-                    .saturating_duration_since(Instant::now())
-            };
+            let mut next_event_time = next_repo_refresh.get();
+            if let Some(next) = next_diff_update.get() {
+                next_event_time = next.min(next_event_time)
+            }
+            if let Some(next) = next_file_update.get() {
+                next_event_time = next.min(next_event_time)
+            }
+
+            let timeout = next_event_time.saturating_duration_since(Instant::now());
+
             if event::poll(timeout).unwrap() {
                 match event::read().unwrap() {
                     CEvent::Key(key) => return Event::Input(key),
@@ -402,25 +436,21 @@ fn run(
                     }
                 }
             }
-            let reload_diffs = if app.active_view == ActiveView::Search {
+            let mut reload_diffs = false;
+            let mut reload_file = false;
+            let mut reset_scroll = true;
+            if app.active_view == ActiveView::Search {
                 if let Event::Input(event) = next_event() {
                     match event.code {
-                        KeyCode::Char(c) => {
-                            app.character_entered(c);
-                            false
-                        }
-                        KeyCode::Esc => {
-                            app.on_esc()?;
-                            false
-                        }
+                        KeyCode::Char(c) => app.character_entered(c),
+                        KeyCode::Esc => reload_file = app.on_esc()?,
                         KeyCode::Enter | KeyCode::F(3) => {
-                            app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                            reload_diffs =
+                                app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
                         }
-                        KeyCode::Backspace => app.on_backspace()?,
-                        _ => false,
+                        KeyCode::Backspace => reload_diffs = app.on_backspace()?,
+                        _ => {}
                     }
-                } else {
-                    false
                 }
             } else {
                 match next_event() {
@@ -444,64 +474,48 @@ fn run(
                                 terminal.show_cursor()?;
                                 break;
                             }
-                            KeyCode::Char('h') | KeyCode::F(1) => {
-                                app.show_help();
-                                false
-                            }
-                            KeyCode::Char('m') => {
-                                match app.active_view {
-                                    ActiveView::Models
-                                    | ActiveView::Search
-                                    | ActiveView::Help(_) => {}
-                                    _ => {
-                                        if let Err(err) = app.select_model() {
-                                            app.set_error(err);
-                                        }
+                            KeyCode::Char('s') => reload_file = app.toggle_syntax_highlight()?,
+                            KeyCode::Char('h') => app.show_help(),
+                            KeyCode::F(1) => app.show_help(),
+                            KeyCode::Char('m') => match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                                _ => {
+                                    if let Err(err) = app.select_model() {
+                                        app.set_error(err);
                                     }
                                 }
-                                false
-                            }
-                            KeyCode::Char('r') => {
-                                app = app.reload(&settings, max_commits)?;
-                                false
-                            }
+                            },
+                            KeyCode::Char('r') => app = app.reload(&settings, max_commits)?,
                             KeyCode::Char('l') => {
                                 if event.modifiers.contains(KeyModifiers::CONTROL) {
                                     app.toggle_line_numbers()?;
                                 } else {
                                     app.toggle_layout();
                                 }
-                                false
                             }
-                            KeyCode::Char('b') => {
-                                app.toggle_branches();
-                                false
-                            }
-                            KeyCode::Char('o') => {
-                                match app.active_view {
-                                    ActiveView::Models
-                                    | ActiveView::Search
-                                    | ActiveView::Help(_) => {}
-                                    _ => {
-                                        if event.modifiers.contains(KeyModifiers::CONTROL) {
-                                            if let Some(graph) = &app.graph_state.graph {
-                                                let path = graph.repository.path();
-                                                let path = path.parent().unwrap_or(path);
-                                                file_dialog.location =
-                                                    PathBuf::from(path.parent().unwrap_or(path));
-                                                file_dialog.selection = Some(PathBuf::from(path));
-                                            } else {
-                                                file_dialog.location = std::env::current_dir()?;
-                                                file_dialog.selection = None
-                                            }
-                                            open_file = true;
+                            KeyCode::Char('b') => app.toggle_branches(),
+                            KeyCode::Char('o') => match app.active_view {
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
+                                _ => {
+                                    if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                        if let Some(graph) = &app.graph_state.graph {
+                                            let path = graph.repository.path();
+                                            let path = path.parent().unwrap_or(path);
+                                            file_dialog.location =
+                                                PathBuf::from(path.parent().unwrap_or(path));
+                                            file_dialog.selection = Some(PathBuf::from(path));
                                         } else {
-                                            app.set_diff_mode(DiffMode::Old)?;
+                                            file_dialog.location = std::env::current_dir()?;
+                                            file_dialog.selection = None
                                         }
+                                        open_file = true;
+                                    } else {
+                                        let reset = app.diff_options.diff_mode == DiffMode::Diff;
+                                        reload_file = app.set_diff_mode(DiffMode::Old)?;
+                                        reset_scroll = reset;
                                     }
                                 }
-                                false
-                            }
+                            },
                             KeyCode::Char('f')
                                 if event.modifiers.contains(KeyModifiers::CONTROL) =>
                             {
@@ -511,28 +525,24 @@ fn run(
                                     | ActiveView::Help(_) => {}
                                     _ => app.open_search(),
                                 }
-                                false
                             }
                             KeyCode::F(3) => match app.active_view {
-                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {
-                                    false
-                                }
+                                ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}
                                 _ => {
                                     if app.search_term.is_none() {
                                         app.open_search();
-                                        false
                                     } else {
-                                        app.search()?
+                                        reload_diffs = app.search()?
                                     }
                                 }
                             },
                             KeyCode::Char('n') => {
-                                app.set_diff_mode(DiffMode::New)?;
-                                false
+                                let reset = app.diff_options.diff_mode == DiffMode::Diff;
+                                reload_file = app.set_diff_mode(DiffMode::New)?;
+                                reset_scroll = reset;
                             }
                             KeyCode::Char('d') => {
-                                app.set_diff_mode(DiffMode::Diff)?;
-                                false
+                                reload_file = app.set_diff_mode(DiffMode::Diff)?;
                             }
                             KeyCode::Char('p') => {
                                 if app.active_view == ActiveView::Models {
@@ -545,49 +555,47 @@ fn run(
                                         app.active_view = ActiveView::Graph;
                                     }
                                 }
-                                false
-                            }
-                            KeyCode::Char('+') => {
-                                app.on_plus()?;
-                                false
-                            }
-                            KeyCode::Char('-') => {
-                                app.on_minus()?;
-                                false
                             }
 
-                            KeyCode::Up => app.on_up(
-                                event.modifiers.contains(KeyModifiers::SHIFT),
-                                event.modifiers.contains(KeyModifiers::CONTROL),
-                            )?,
-                            KeyCode::Down => app.on_down(
-                                event.modifiers.contains(KeyModifiers::SHIFT),
-                                event.modifiers.contains(KeyModifiers::CONTROL),
-                            )?,
-                            KeyCode::Home => app.on_home()?,
-                            KeyCode::End => app.on_end()?,
-                            KeyCode::Left => {
-                                app.on_left(
-                                    event.modifiers.contains(KeyModifiers::SHIFT),
-                                    event.modifiers.contains(KeyModifiers::CONTROL),
-                                );
-                                false
+                            KeyCode::Char('+') => {
+                                reload_file = app.on_plus()?;
+                                reset_scroll = false;
                             }
-                            KeyCode::Right => {
-                                app.on_right(
+                            KeyCode::Char('-') => {
+                                reload_file = app.on_minus()?;
+                                reset_scroll = false;
+                            }
+
+                            KeyCode::Up => {
+                                let (rd, rf) = app.on_up(
                                     event.modifiers.contains(KeyModifiers::SHIFT),
                                     event.modifiers.contains(KeyModifiers::CONTROL),
                                 )?;
-                                false
+                                reload_diffs = rd;
+                                reload_file = rf;
                             }
-                            KeyCode::Tab => {
-                                app.on_tab();
-                                false
+                            KeyCode::Down => {
+                                let (rd, rf) = app.on_down(
+                                    event.modifiers.contains(KeyModifiers::SHIFT),
+                                    event.modifiers.contains(KeyModifiers::CONTROL),
+                                )?;
+                                reload_diffs = rd;
+                                reload_file = rf;
                             }
-                            KeyCode::Esc => {
-                                app.on_esc()?;
-                                false
+                            KeyCode::Home => reload_diffs = app.on_home()?,
+                            KeyCode::End => reload_diffs = app.on_end()?,
+                            KeyCode::Left => app.on_left(
+                                event.modifiers.contains(KeyModifiers::SHIFT),
+                                event.modifiers.contains(KeyModifiers::CONTROL),
+                            ),
+                            KeyCode::Right => {
+                                reload_file = app.on_right(
+                                    event.modifiers.contains(KeyModifiers::SHIFT),
+                                    event.modifiers.contains(KeyModifiers::CONTROL),
+                                )?
                             }
+                            KeyCode::Tab => app.on_tab(),
+                            KeyCode::Esc => reload_file = app.on_esc()?,
                             KeyCode::Enter => {
                                 if app.active_view == ActiveView::Models {
                                     let (a, s, result) =
@@ -598,19 +606,17 @@ fn run(
                                         app.set_error(err);
                                         app.active_view = ActiveView::Graph;
                                     }
-                                    false
                                 } else {
-                                    app.on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
+                                    reload_diffs = app
+                                        .on_enter(event.modifiers.contains(KeyModifiers::CONTROL))?
                                 }
                             }
                             KeyCode::Backspace => {
                                 if app.active_view != ActiveView::Models {
-                                    app.on_backspace()?
-                                } else {
-                                    false
+                                    reload_diffs = app.on_backspace()?
                                 }
                             }
-                            _ => false,
+                            _ => {}
                         }
                     }
                     Event::Update => {
@@ -623,11 +629,16 @@ fn run(
                         }
                         if let Some(next) = next_diff_update.get() {
                             if next <= now {
-                                app.reload_diff_files()?;
+                                reload_file = app.reload_diff_files()?;
                                 next_diff_update.set(None);
                             }
                         }
-                        false
+                        if let Some(next) = next_file_update.get() {
+                            if next <= now {
+                                app.file_changed(reset_diff_scroll)?;
+                                next_file_update.set(None);
+                            }
+                        }
                     }
                 }
             };
@@ -637,9 +648,16 @@ fn run(
                     Instant::now() + Duration::from_millis(2 * key_repeat_time as u64),
                 ));
             }
-            if app.should_quit {
-                break;
+            if reload_file {
+                if reset_scroll {
+                    app.clear_file_diff();
+                }
+                reset_diff_scroll = reset_scroll;
+                next_file_update.set(Some(
+                    Instant::now() + Duration::from_millis(2 * key_repeat_time as u64),
+                ));
             }
+
             if open_file {
                 let prev = if let Some(graph) = &app.graph_state.graph {
                     graph.repository.path().parent().map(PathBuf::from)
@@ -704,7 +722,13 @@ fn run(
                         if let Some(path) = &file_dialog.selection {
                             match get_repo(path) {
                                 Ok(repo) => {
-                                    app = Some(create_app(repo, &mut settings, model, max_commits)?)
+                                    app = Some(create_app(
+                                        repo,
+                                        &mut settings,
+                                        &app_settings,
+                                        model,
+                                        max_commits,
+                                    )?)
                                 }
                                 Err(_) => {
                                     file_dialog.on_right()?;
@@ -818,6 +842,7 @@ pub fn set_model<P: AsRef<Path>>(
 fn create_app(
     repository: Repository,
     settings: &mut Settings,
+    app_settings: &AppSettings,
     model: Option<&str>,
     max_commits: Option<usize>,
 ) -> Result<App, String> {
@@ -839,12 +864,15 @@ fn create_app(
     let branches = get_branches(&graph)?;
     let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
 
-    Ok(
-        App::new(format!("git-igitt - {}", name), name.clone(), models_dir)
-            .with_graph(graph, graph_lines, text_lines, indices, true)?
-            .with_branches(branches)
-            .with_color(settings.colored),
+    Ok(App::new(
+        app_settings.clone(),
+        format!("git-igitt - {}", name),
+        name.clone(),
+        models_dir,
     )
+    .with_graph(graph, graph_lines, text_lines, indices, true)?
+    .with_branches(branches)
+    .with_color(settings.colored))
 }
 
 fn has_changed(app: &mut App) -> Result<bool, String> {

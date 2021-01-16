@@ -1,5 +1,6 @@
 use crate::app::{ActiveView, App, DiffMode};
 use crate::dialogs::FileDialog;
+use crate::util::syntax_highlight::as_styled;
 use crate::widgets::branches_view::{BranchList, BranchListItem};
 use crate::widgets::commit_view::CommitView;
 use crate::widgets::files_view::{FileList, FileListItem};
@@ -347,65 +348,87 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             Style::default(),
         ];
 
-        let (space_old_ln, space_new_ln, empty_old_ln, empty_new_ln) = if app.line_numbers {
-            let mut max_old_ln = None;
-            let mut max_new_ln = None;
-
-            for (_, old_ln, new_ln) in state.diffs.iter().rev() {
-                if max_old_ln.is_none() {
-                    if let Some(old_ln) = old_ln {
-                        max_old_ln = Some(*old_ln);
-                    }
-                }
-                if max_new_ln.is_none() {
-                    if let Some(new_ln) = new_ln {
-                        max_new_ln = Some(*new_ln);
-                    }
-                }
-                if max_old_ln.is_some() && max_new_ln.is_some() {
-                    break;
-                }
-            }
-
-            let space_old_ln =
-                std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().ceil() as usize);
-            let space_new_ln =
-                std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().ceil() as usize) + 1;
-
-            (
-                space_old_ln,
-                space_new_ln,
-                " ".repeat(space_old_ln),
-                " ".repeat(space_new_ln),
-            )
-        } else {
-            (0, 0, String::new(), String::new())
-        };
-
         let mut text = Text::from("");
-        for (line, old_ln, new_ln) in &state.diffs {
-            let ln = if line.starts_with("@@ ") {
-                if let Some(pos) = line.find(" @@ ") {
-                    &line[..pos + 3]
+        if app.diff_options.diff_mode == DiffMode::Diff {
+            let (space_old_ln, space_new_ln, empty_old_ln, empty_new_ln) =
+                if app.diff_options.line_numbers {
+                    let mut max_old_ln = None;
+                    let mut max_new_ln = None;
+
+                    for (_, old_ln, new_ln) in state.diffs.iter().rev() {
+                        if max_old_ln.is_none() {
+                            if let Some(old_ln) = old_ln {
+                                max_old_ln = Some(*old_ln);
+                            }
+                        }
+                        if max_new_ln.is_none() {
+                            if let Some(new_ln) = new_ln {
+                                max_new_ln = Some(*new_ln);
+                            }
+                        }
+                        if max_old_ln.is_some() && max_new_ln.is_some() {
+                            break;
+                        }
+                    }
+
+                    let space_old_ln =
+                        std::cmp::max(3, (max_old_ln.unwrap_or(0) as f32).log10().ceil() as usize);
+                    let space_new_ln =
+                        std::cmp::max(3, (max_new_ln.unwrap_or(0) as f32).log10().ceil() as usize)
+                            + 1;
+
+                    (
+                        space_old_ln,
+                        space_new_ln,
+                        " ".repeat(space_old_ln),
+                        " ".repeat(space_new_ln),
+                    )
+                } else {
+                    (0, 0, String::new(), String::new())
+                };
+
+            for (line, old_ln, new_ln) in &state.diffs {
+                let ln = if line.starts_with("@@ ") {
+                    if let Some(pos) = line.find(" @@ ") {
+                        &line[..pos + 3]
+                    } else {
+                        line
+                    }
                 } else {
                     line
+                };
+
+                if app.diff_options.line_numbers && (old_ln.is_some() || new_ln.is_some()) {
+                    let l1 = old_ln
+                        .map(|v| format!("{:>width$}", v, width = space_old_ln))
+                        .unwrap_or_else(|| empty_old_ln.clone());
+                    let l2 = new_ln
+                        .map(|v| format!("{:>width$}", v, width = space_new_ln))
+                        .unwrap_or_else(|| empty_new_ln.clone());
+                    let fmt = format!("{}{}|", l1, l2);
+
+                    text.extend(style_diff_line(Some(fmt), ln, &styles, app.color));
+                } else {
+                    text.extend(style_diff_line(None, ln, &styles, app.color));
                 }
-            } else {
-                line
-            };
-
-            if app.line_numbers && (old_ln.is_some() || new_ln.is_some()) {
-                let l1 = old_ln
-                    .map(|v| format!("{:>width$}", v, width = space_old_ln))
-                    .unwrap_or_else(|| empty_old_ln.clone());
-                let l2 = new_ln
-                    .map(|v| format!("{:>width$}", v, width = space_new_ln))
-                    .unwrap_or_else(|| empty_new_ln.clone());
-                let fmt = format!("{}{}|", l1, l2);
-
-                text.extend(style_diff_line(Some(fmt), ln, &styles, app.color));
-            } else {
-                text.extend(style_diff_line(None, ln, &styles, app.color));
+            }
+        } else {
+            if !state.diffs.is_empty() {
+                text.extend(style_diff_line(None, &state.diffs[0].0, &styles, app.color));
+            }
+            if !state.diffs.len() > 1 {
+                if let Some(txt) = &state.highlighted {
+                    text.extend(as_styled(txt));
+                } else {
+                    // TODO: Due to a bug in tui-rs (?), it is necessary to trim line ends.
+                    // Otherwise, artifacts of the previous buffer may occur
+                    if state.diffs.len() > 1 {
+                        for line in state.diffs[1].0.lines() {
+                            let styled = style_diff_line(None, line.trim_end(), &styles, app.color);
+                            text.extend(styled);
+                        }
+                    }
+                }
             }
         }
 
@@ -521,7 +544,8 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
          \n  \
            +/-                Increase/decrease number of diff context lines\n  \
            D/N/O              Show diff or new/old version of file\n  \
-           Ctrl + L           Toggle line numbers",
+           Ctrl + L           Toggle line numbers\n  \
+           S                  Toggle syntax highlighting (new/old file only, turn off if too slow)",
     )
     .block(block)
     .scroll((scroll, 0));

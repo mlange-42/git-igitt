@@ -1,3 +1,5 @@
+use crate::settings::AppSettings;
+use crate::util::syntax_highlight::highlight;
 use crate::widgets::branches_view::{BranchItem, BranchItemType};
 use crate::widgets::commit_view::{CommitViewInfo, CommitViewState, DiffItem};
 use crate::widgets::diff_view::{DiffViewInfo, DiffViewState};
@@ -45,6 +47,8 @@ pub enum DiffMode {
 pub struct DiffOptions {
     pub context_lines: u32,
     pub diff_mode: DiffMode,
+    pub line_numbers: bool,
+    pub syntax_highlight: bool,
 }
 
 impl Default for DiffOptions {
@@ -52,6 +56,8 @@ impl Default for DiffOptions {
         Self {
             context_lines: 3,
             diff_mode: DiffMode::Diff,
+            line_numbers: true,
+            syntax_highlight: true,
         }
     }
 }
@@ -98,6 +104,7 @@ pub type CurrentBranches = Vec<(Option<String>, Option<Oid>)>;
 pub type DiffLines = Vec<(String, Option<u32>, Option<u32>)>;
 
 pub struct App {
+    pub settings: AppSettings,
     pub graph_state: GraphViewState,
     pub commit_state: CommitViewState,
     pub diff_state: DiffViewState,
@@ -111,8 +118,6 @@ pub struct App {
     pub horizontal_split: bool,
     pub show_branches: bool,
     pub color: bool,
-    pub line_numbers: bool,
-    pub should_quit: bool,
     pub models_path: PathBuf,
     pub error_message: Option<String>,
     pub diff_options: DiffOptions,
@@ -120,8 +125,14 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(title: String, repo_name: String, models_path: PathBuf) -> App {
+    pub fn new(
+        settings: AppSettings,
+        title: String,
+        repo_name: String,
+        models_path: PathBuf,
+    ) -> App {
         App {
+            settings,
             graph_state: GraphViewState::default(),
             commit_state: CommitViewState::default(),
             diff_state: DiffViewState::default(),
@@ -135,8 +146,6 @@ impl App {
             horizontal_split: true,
             show_branches: false,
             color: true,
-            line_numbers: true,
-            should_quit: false,
             models_path,
             error_message: None,
             diff_options: DiffOptions::default(),
@@ -219,7 +228,7 @@ impl App {
         }
     }
 
-    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+    pub fn on_up(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(bool, bool), String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -228,10 +237,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        return Ok(true);
+                        return Ok((true, false));
                     }
                 } else if self.graph_state.move_selection(step, false) {
-                    return Ok(true);
+                    return Ok((true, false));
                 }
             }
             ActiveView::Branches => {
@@ -249,8 +258,7 @@ impl App {
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.bwd(step);
-                    self.file_changed()?;
+                    return Ok((false, content.diffs.bwd(step)));
                 }
             }
             ActiveView::Diff => {
@@ -268,10 +276,10 @@ impl App {
             }
             _ => {}
         }
-        Ok(false)
+        Ok((false, false))
     }
 
-    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+    pub fn on_down(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(bool, bool), String> {
         let step = if is_shift { 10 } else { 1 };
         match self.active_view {
             ActiveView::Graph => {
@@ -280,10 +288,10 @@ impl App {
                         if self.graph_state.secondary_selected == self.graph_state.selected {
                             self.graph_state.secondary_selected = None;
                         }
-                        return Ok(true);
+                        return Ok((true, false));
                     }
                 } else if self.graph_state.move_selection(step, true) {
-                    return Ok(true);
+                    return Ok((true, false));
                 }
             }
             ActiveView::Branches => {
@@ -301,8 +309,7 @@ impl App {
             }
             ActiveView::Files => {
                 if let Some(content) = &mut self.commit_state.content {
-                    content.diffs.fwd(step);
-                    self.file_changed()?;
+                    return Ok((false, content.diffs.fwd(step)));
                 }
             }
             ActiveView::Diff => {
@@ -320,7 +327,7 @@ impl App {
             }
             _ => {}
         }
-        Ok(false)
+        Ok((false, false))
     }
 
     pub fn on_home(&mut self) -> Result<bool, String> {
@@ -348,7 +355,8 @@ impl App {
         Ok(false)
     }
 
-    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<(), String> {
+    pub fn on_right(&mut self, is_shift: bool, is_ctrl: bool) -> Result<bool, String> {
+        let mut reload_file_diff = false;
         if is_ctrl {
             let step = if is_shift { 15 } else { 3 };
             match self.active_view {
@@ -382,7 +390,7 @@ impl App {
                     if let Some(commit) = &mut self.commit_state.content {
                         if commit.diffs.state.selected.is_none() && !commit.diffs.items.is_empty() {
                             commit.diffs.state.selected = Some(0);
-                            self.file_changed()?
+                            reload_file_diff = true;
                         }
                     }
                     ActiveView::Files
@@ -394,7 +402,7 @@ impl App {
                 ActiveView::Search => ActiveView::Search,
             }
         }
-        Ok(())
+        Ok(reload_file_diff)
     }
     pub fn on_left(&mut self, is_shift: bool, is_ctrl: bool) {
         if is_ctrl {
@@ -504,27 +512,27 @@ impl App {
         Ok(false)
     }
 
-    pub fn on_plus(&mut self) -> Result<(), String> {
+    pub fn on_plus(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_add(1);
-            self.file_changed()?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn on_minus(&mut self) -> Result<(), String> {
+    pub fn on_minus(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.context_lines = self.diff_options.context_lines.saturating_sub(1);
-            self.file_changed()?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
     pub fn on_tab(&mut self) {
         self.is_fullscreen = !self.is_fullscreen;
     }
 
-    pub fn on_esc(&mut self) -> Result<(), String> {
+    pub fn on_esc(&mut self) -> Result<bool, String> {
         match self.active_view {
             ActiveView::Models | ActiveView::Help(_) => {
                 self.active_view = self.prev_active_view.take().unwrap_or(ActiveView::Graph);
@@ -540,11 +548,11 @@ impl App {
                     content.diffs.state.scroll_x = 0;
                 }
                 self.diff_options.diff_mode = DiffMode::Diff;
-                self.file_changed()?;
+                return Ok(true);
             }
         }
 
-        Ok(())
+        Ok(false)
     }
 
     pub fn character_entered(&mut self, c: char) {
@@ -630,20 +638,30 @@ impl App {
         false
     }
 
-    pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<(), String> {
-        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+    pub fn set_diff_mode(&mut self, mode: DiffMode) -> Result<bool, String> {
+        if mode != self.diff_options.diff_mode
+            && (self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files)
+        {
             self.diff_options.diff_mode = mode;
-            self.file_changed()?;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
     }
 
-    pub fn toggle_line_numbers(&mut self) -> Result<(), String> {
+    pub fn toggle_line_numbers(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
-            self.line_numbers = !self.line_numbers;
-            self.file_changed()?;
+            self.diff_options.line_numbers = !self.diff_options.line_numbers;
+            return Ok(true);
         }
-        Ok(())
+        Ok(false)
+    }
+
+    pub fn toggle_syntax_highlight(&mut self) -> Result<bool, String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.syntax_highlight = !self.diff_options.syntax_highlight;
+            return Ok(true);
+        }
+        Ok(false)
     }
 
     pub fn toggle_layout(&mut self) {
@@ -683,7 +701,8 @@ impl App {
 
     pub fn selection_changed(&mut self) -> Result<(), String> {
         self.reload_diff_message()?;
-        self.reload_diff_files()
+        let _reload_file = self.reload_diff_files()?;
+        Ok(())
     }
 
     pub fn reload_diff_message(&mut self) -> Result<(), String> {
@@ -735,11 +754,11 @@ impl App {
                     None
                 }
         }
-        self.file_changed()?;
+        //self.file_changed(true)?;
         Ok(())
     }
 
-    pub fn reload_diff_files(&mut self) -> Result<(), String> {
+    pub fn reload_diff_files(&mut self) -> Result<bool, String> {
         if let Some(graph) = &self.graph_state.graph {
             if let Some(content) = &mut self.commit_state.content {
                 let commit = graph
@@ -763,11 +782,17 @@ impl App {
                 content.diffs = StatefulList::with_items(diffs)
             }
         }
-        self.file_changed()?;
-        Ok(())
+        Ok(true)
     }
 
-    fn file_changed(&mut self) -> Result<(), String> {
+    pub fn clear_file_diff(&mut self) {
+        if let Some(content) = &mut self.diff_state.content {
+            content.diffs.clear();
+            content.highlighted = None;
+        }
+    }
+
+    pub fn file_changed(&mut self, reset_scroll: bool) -> Result<(), String> {
         if let (Some(graph), Some(state)) = (&self.graph_state.graph, &self.commit_state.content) {
             self.diff_state.content = if let Some((info, sel_index)) = self
                 .graph_state
@@ -810,13 +835,35 @@ impl App {
                     &commit,
                     &selection.file,
                     &self.diff_options,
+                    &self.settings.tab_spaces,
                 )?;
 
-                Some(DiffViewInfo::new(
+                let highlighted = if self.color
+                    && self.diff_options.syntax_highlight
+                    && self.diff_options.diff_mode != DiffMode::Diff
+                    && diffs.len() == 2
+                {
+                    PathBuf::from(&selection.file)
+                        .extension()
+                        .and_then(|ext| ext.to_str().and_then(|ext| highlight(&diffs[1].0, ext)))
+                } else {
+                    None
+                };
+
+                let mut info = DiffViewInfo::new(
                     diffs,
+                    highlighted,
                     info.oid,
                     comp_oid.unwrap_or_else(Oid::zero),
-                ))
+                );
+
+                if !reset_scroll {
+                    if let Some(diff_state) = &self.diff_state.content {
+                        info.scroll = diff_state.scroll;
+                    }
+                }
+
+                Some(info)
             } else {
                 None
             }
@@ -852,7 +899,8 @@ fn get_diff_files(
 
     let mut diff_err = Ok(());
     diff.print(DiffFormat::NameStatus, |d, _h, l| {
-        let content = std::str::from_utf8(l.content()).unwrap();
+        let content =
+            std::str::from_utf8(l.content()).unwrap_or("Invalid UTF8 character in file name.");
         let tp = match DiffType::from_str(&content[..1]) {
             Ok(tp) => tp,
             Err(err) => {
@@ -883,10 +931,12 @@ fn get_file_diffs(
     new: &Commit,
     path: &str,
     options: &DiffOptions,
+    tab_spaces: &str,
 ) -> Result<DiffLines, String> {
     let mut diffs = vec![];
     let mut opts = GDiffOptions::new();
     opts.context_lines(options.context_lines);
+    opts.indent_heuristic(true);
     opts.pathspec(path);
     opts.disable_pathspec_match(true);
     let diff = graph
@@ -906,7 +956,11 @@ fn get_file_diffs(
     if options.diff_mode == DiffMode::Diff {
         diff.print(DiffFormat::Patch, |d, h, l| {
             match print_diff_line(&d, &h, &l) {
-                Ok(line) => diffs.push((line, l.old_lineno(), l.new_lineno())),
+                Ok(line) => diffs.push((
+                    line.replace("\t", tab_spaces),
+                    l.old_lineno(),
+                    l.new_lineno(),
+                )),
                 Err(err) => {
                     diff_error = Err(err);
                     return false;
@@ -926,14 +980,9 @@ fn get_file_diffs(
                 )
             };
 
-            let line = match std::str::from_utf8(l.content()) {
-                Ok(text) => text,
-                Err(err) => {
-                    diff_error = Err(err.to_string());
-                    return false;
-                }
-            }
-            .to_string();
+            let line = std::str::from_utf8(l.content())
+                .unwrap_or("Invalid UTF8 character.")
+                .replace("\t", tab_spaces);
             diffs.push((line, None, None));
 
             if blob_oid.is_zero() {
@@ -951,15 +1000,10 @@ fn get_file_diffs(
                     }
                 };
 
-                let text = match std::str::from_utf8(blob.content()).map_err(|err| err.to_string())
-                {
-                    Ok(text) => text,
-                    Err(err) => {
-                        diff_error = Err(err);
-                        return false;
-                    }
-                };
-                diffs.push((text.to_string(), None, None));
+                let text = std::str::from_utf8(blob.content())
+                    .map_err(|err| err.to_string())
+                    .unwrap_or("Invalid UTF8 character.");
+                diffs.push((text.replace("\t", tab_spaces), None, None));
             }
             true
         }) {
@@ -977,7 +1021,6 @@ fn get_file_diffs(
                 ))
             }
         };
-        //.map_err(|err| err.message().to_string())?;
     }
     diff_error?;
     Ok(diffs)
@@ -996,7 +1039,7 @@ fn print_diff_line(
     write!(
         out,
         "{}",
-        std::str::from_utf8(line.content()).map_err(|err| err.to_string())?
+        std::str::from_utf8(line.content()).unwrap_or("Invalid UTF8 character.")
     )
     .map_err(|err| err.to_string())?;
     Ok(out)
