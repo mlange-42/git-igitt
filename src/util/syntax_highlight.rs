@@ -1,6 +1,7 @@
 use lazy_static::lazy_static;
 use syntect::easy::HighlightLines;
-use syntect::highlighting::{Style, ThemeSet};
+use syntect::highlighting::Color as SynColor;
+use syntect::highlighting::{Style, Theme, ThemeSet};
 use syntect::parsing::SyntaxSet;
 use tui::style::Color;
 use tui::text::{Span, Spans, Text};
@@ -10,11 +11,27 @@ lazy_static! {
         syntax: SyntaxSet::load_defaults_nonewlines(),
         themes: ThemeSet::load_defaults()
     };
+    static ref THEME: Theme = create_custom_theme();
 }
 
 struct Syntax {
     pub syntax: SyntaxSet,
     pub themes: ThemeSet,
+}
+
+fn create_custom_theme() -> Theme {
+    let mut theme = SYNTAX.themes.themes["Solarized (dark)"].clone();
+    theme.settings.foreground = theme.settings.foreground.map(|color| brighter(color, 0.4)); //Some(syntect::highlighting::Color::WHITE);
+    theme
+}
+
+fn brighter(color: SynColor, factor: f32) -> SynColor {
+    SynColor {
+        r: color.r + ((255 - color.r) as f32 * factor) as u8,
+        g: color.g + ((255 - color.g) as f32 * factor) as u8,
+        b: color.b + ((255 - color.b) as f32 * factor) as u8,
+        a: color.a,
+    }
 }
 
 pub fn highlight(lines: &str, extension: &str) -> Option<Vec<Vec<(Style, String)>>> {
@@ -23,7 +40,7 @@ pub fn highlight(lines: &str, extension: &str) -> Option<Vec<Vec<(Style, String)
         Some(syntax) => syntax,
     };
 
-    let mut h = HighlightLines::new(syntax, &SYNTAX.themes.themes["Solarized (dark)"]);
+    let mut h = HighlightLines::new(syntax, &THEME);
 
     // TODO: Due to a bug in tui-rs (?), it is necessary to trim line ends.
     // Otherwise, artifacts of the previous buffer may occur
