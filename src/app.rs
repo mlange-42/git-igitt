@@ -884,7 +884,8 @@ fn get_diff_files(
 
     let mut diff_err = Ok(());
     diff.print(DiffFormat::NameStatus, |d, _h, l| {
-        let content = std::str::from_utf8(l.content()).unwrap();
+        let content =
+            std::str::from_utf8(l.content()).unwrap_or("Invalid UTF8 character in file name.");
         let tp = match DiffType::from_str(&content[..1]) {
             Ok(tp) => tp,
             Err(err) => {
@@ -958,14 +959,9 @@ fn get_file_diffs(
                 )
             };
 
-            let line = match std::str::from_utf8(l.content()) {
-                Ok(text) => text,
-                Err(err) => {
-                    diff_error = Err(err.to_string());
-                    return false;
-                }
-            }
-            .to_string();
+            let line = std::str::from_utf8(l.content())
+                .unwrap_or("Invalid UTF8 character.")
+                .to_string();
             diffs.push((line, None, None));
 
             if blob_oid.is_zero() {
@@ -983,14 +979,9 @@ fn get_file_diffs(
                     }
                 };
 
-                let text = match std::str::from_utf8(blob.content()).map_err(|err| err.to_string())
-                {
-                    Ok(text) => text,
-                    Err(err) => {
-                        diff_error = Err(err);
-                        return false;
-                    }
-                };
+                let text = std::str::from_utf8(blob.content())
+                    .map_err(|err| err.to_string())
+                    .unwrap_or("Invalid UTF8 character.");
                 diffs.push((text.to_string(), None, None));
             }
             true
@@ -1027,7 +1018,7 @@ fn print_diff_line(
     write!(
         out,
         "{}",
-        std::str::from_utf8(line.content()).map_err(|err| err.to_string())?
+        std::str::from_utf8(line.content()).unwrap_or("Invalid UTF8 character.")
     )
     .map_err(|err| err.to_string())?;
     Ok(out)
