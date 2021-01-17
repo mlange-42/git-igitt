@@ -424,8 +424,13 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                     // Otherwise, artifacts of the previous buffer may occur
                     if state.diffs.len() > 1 {
                         for line in state.diffs[1].0.lines() {
-                            let styled = style_diff_line(None, line.trim_end(), &styles, app.color);
-                            text.extend(styled);
+                            let trim = line.trim_end();
+                            if trim.is_empty() {
+                                text.extend(Text::raw("\n"));
+                            } else {
+                                let styled = style_diff_line(None, trim, &styles, app.color);
+                                text.extend(styled);
+                            }
                         }
                     }
                 }

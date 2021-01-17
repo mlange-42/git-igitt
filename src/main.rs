@@ -73,9 +73,9 @@ fn from_args() -> Result<(), String> {
                  https://github.com/mlange-42/git-igitt\n\
              \n\
              EXAMPES:\n    \
-                 git-graph                   -> Show graph\n    \
-                 git-graph --style round     -> Show graph in a different style\n    \
-                 git-graph --model <model>   -> Show graph using a certain <model>\n    \
+                 git-graph                   -> Start application\n    \
+                 git-graph --style round     -> Start application with a different graph style\n    \
+                 git-graph --model <model>   -> Start application using a certain <model>\n    \
                  git-graph model --list      -> List available branching models\n    \
                  git-graph model             -> Show repo's current branching models\n    \
                  git-graph model <model>     -> Permanently set model <model> for this repo",
@@ -156,7 +156,8 @@ fn from_args() -> Result<(), String> {
                 .long("tab-width")
                 .help("Tab width for display in diffs. Default: 4.")
                 .required(false)
-                .takes_value(true),
+                .takes_value(true)
+                .value_name("width"),
         )
         .arg(
             Arg::with_name("format")
@@ -474,7 +475,10 @@ fn run(
                                 terminal.show_cursor()?;
                                 break;
                             }
-                            KeyCode::Char('s') => reload_file = app.toggle_syntax_highlight()?,
+                            KeyCode::Char('s') => {
+                                reload_file = app.toggle_syntax_highlight()?;
+                                reset_scroll = false
+                            }
                             KeyCode::Char('h') => app.show_help(),
                             KeyCode::F(1) => app.show_help(),
                             KeyCode::Char('m') => match app.active_view {
