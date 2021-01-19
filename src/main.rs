@@ -357,21 +357,37 @@ fn run(
 
     let repo_refresh_interval = Duration::from_millis(CHECK_CHANGE_RATE);
 
+    let mut file_dialog =
+        FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
+    if let Some(repo) = &repository {
+        if repo.is_shallow() {
+            file_dialog.set_error(format!("{} is a shallow clone. Shallow clones are not supported due to a missing feature in the underlying libgit2 library.", repo.path().parent().unwrap().display()));
+            let selected = repo.path().parent().unwrap();
+            //file_dialog.selection = Some(PathBuf::from(selected));
+            file_dialog.location = PathBuf::from(selected.parent().unwrap());
+            file_dialog.selection_changed(Some(PathBuf::from(selected)))?;
+        } else {
+            file_dialog.selection_changed(None)?;
+        }
+    } else {
+        file_dialog.selection_changed(None)?;
+    }
+
     let mut app = if let Some(repository) = repository.take() {
-        Some(create_app(
-            repository,
-            &mut settings,
-            &app_settings,
-            model,
-            max_commits,
-        )?)
+        if repository.is_shallow() {
+            None
+        } else {
+            Some(create_app(
+                repository,
+                &mut settings,
+                &app_settings,
+                model,
+                max_commits,
+            )?)
+        }
     } else {
         None
     };
-
-    let mut file_dialog =
-        FileDialog::new("Open repository", settings.colored).map_err(|err| err.to_string())?;
-    file_dialog.selection_changed(None)?;
 
     let next_repo_refresh = &Cell::new(Instant::now() + repo_refresh_interval);
     let next_diff_update: &Cell<Option<Instant>> = &Cell::new(None);
@@ -726,13 +742,17 @@ fn run(
                         if let Some(path) = &file_dialog.selection {
                             match get_repo(path) {
                                 Ok(repo) => {
-                                    app = Some(create_app(
-                                        repo,
-                                        &mut settings,
-                                        &app_settings,
-                                        model,
-                                        max_commits,
-                                    )?)
+                                    if repo.is_shallow() {
+                                        file_dialog.set_error(format!("{} is a shallow clone. Shallow clones are not supported due to a missing feature in the underlying libgit2 library.", repo.path().parent().unwrap().display()));
+                                    } else {
+                                        app = Some(create_app(
+                                            repo,
+                                            &mut settings,
+                                            &app_settings,
+                                            model,
+                                            max_commits,
+                                        )?)
+                                    }
                                 }
                                 Err(_) => {
                                     file_dialog.on_right()?;
