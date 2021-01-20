@@ -437,7 +437,11 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             }
         }
 
-        let paragraph = Paragraph::new(text).block(block).scroll(state.scroll);
+        let mut paragraph = Paragraph::new(text).block(block).scroll(state.scroll);
+
+        if app.diff_options.wrap_lines {
+            paragraph = paragraph.wrap(Wrap { trim: false });
+        }
 
         f.render_widget(paragraph, target);
     } else {
@@ -550,6 +554,7 @@ fn draw_help<B: Backend>(f: &mut Frame<B>, target: Rect, scroll: u16) {
            +/-                Increase/decrease number of diff context lines\n  \
            D/N/O              Show diff or new/old version of file\n  \
            Ctrl + L           Toggle line numbers\n  \
+           Ctrl + W           Toggle line wrapping\n  \
            S                  Toggle syntax highlighting (new/old file only, turn off if too slow)",
     )
     .block(block)
