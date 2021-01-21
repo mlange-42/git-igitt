@@ -108,7 +108,7 @@ For details on **how to create your own branching models** see section
 * Supports only the primary remote repository `origin`
 * Does currently not support "octopus merges" (i.e. no more than 2 parents)
 * No support for shallow clones due to missing feature in underlying library [`libgit2`](https://github.com/libgit2/libgit2)
-* Syntax highlighting may be slow for large files (turn on/off with by typing `S`)
+* Syntax highlighting may be slow for large files (turn on/off by typing `S`)
 
 ## Contributing
 

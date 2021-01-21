@@ -242,8 +242,8 @@ dependencies = [
 
 [[package]]
 name = "git-graph"
-version = "0.4.2"
-source = "git+https://github.com/mlange-42/git-graph?tag=0.4.2#d370e8f4d470a303927971adc6873909ac7cc78f"
+version = "0.4.3"
+source = "git+https://github.com/mlange-42/git-graph?tag=0.4.3#df3574bbce6f3528424e40909dd16efa5ed0ff89"
 dependencies = [
  "atty",
  "chrono",
@@ -264,7 +264,7 @@ dependencies = [
 
 [[package]]
 name = "git-igitt"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "clap",
  "crossterm 0.19.0",
