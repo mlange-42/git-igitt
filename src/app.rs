@@ -49,6 +49,7 @@ pub struct DiffOptions {
     pub diff_mode: DiffMode,
     pub line_numbers: bool,
     pub syntax_highlight: bool,
+    pub wrap_lines: bool,
 }
 
 impl Default for DiffOptions {
@@ -58,6 +59,7 @@ impl Default for DiffOptions {
             diff_mode: DiffMode::Diff,
             line_numbers: true,
             syntax_highlight: true,
+            wrap_lines: false,
         }
     }
 }
@@ -651,6 +653,14 @@ impl App {
     pub fn toggle_line_numbers(&mut self) -> Result<bool, String> {
         if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
             self.diff_options.line_numbers = !self.diff_options.line_numbers;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    pub fn toggle_line_wrap(&mut self) -> Result<bool, String> {
+        if self.active_view == ActiveView::Diff || self.active_view == ActiveView::Files {
+            self.diff_options.wrap_lines = !self.diff_options.wrap_lines;
             return Ok(true);
         }
         Ok(false)

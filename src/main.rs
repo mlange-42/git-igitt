@@ -513,6 +513,11 @@ fn run(
                                     app.toggle_layout();
                                 }
                             }
+                            KeyCode::Char('w') => {
+                                if event.modifiers.contains(KeyModifiers::CONTROL) {
+                                    app.toggle_line_wrap()?;
+                                }
+                            }
                             KeyCode::Char('b') => app.toggle_branches(),
                             KeyCode::Char('o') => match app.active_view {
                                 ActiveView::Models | ActiveView::Search | ActiveView::Help(_) => {}

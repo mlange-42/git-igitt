@@ -3,7 +3,7 @@ use git_graph::print::format::format_date;
 use std::fmt::Write;
 use yansi::Paint;
 
-/// Format a commit for `CommitFormat::Short`, `CommitFormat::Medium` or `CommitFormat::Full`.
+/// Format a commit.
 pub fn format(
     commit: &Commit,
     branches: String,
