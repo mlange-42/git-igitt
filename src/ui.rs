@@ -414,7 +414,7 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
             }
         } else {
             if !state.diffs.is_empty() {
-                text.extend(style_diff_line(None, &state.diffs[0].0, &styles, app.color));
+                text.extend(style_diff_line(None, &state.diffs[0].0, &styles, false));
             }
             if !state.diffs.len() > 1 {
                 if let Some(txt) = &state.highlighted {
@@ -428,7 +428,7 @@ fn draw_diff<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                             if trim.is_empty() {
                                 text.extend(Text::raw("\n"));
                             } else {
-                                let styled = style_diff_line(None, trim, &styles, app.color);
+                                let styled = style_diff_line(None, trim, &styles, false);
                                 text.extend(styled);
                             }
                         }
