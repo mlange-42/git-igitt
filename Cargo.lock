@@ -242,8 +242,8 @@ dependencies = [
 
 [[package]]
 name = "git-graph"
-version = "0.4.3"
-source = "git+https://github.com/mlange-42/git-graph?tag=0.4.3#df3574bbce6f3528424e40909dd16efa5ed0ff89"
+version = "0.5.0"
+source = "git+https://github.com/mlange-42/git-graph?tag=0.5.0#cbacf9712af0c3f6d56bf163042147b34fecc2e8"
 dependencies = [
  "atty",
  "chrono",

@@ -734,8 +734,8 @@ impl App {
                     };
 
                     let hash_color = if self.color { Some(HASH_COLOR) } else { None };
-                    let branches = format_branches(&graph, info, head, self.color)?;
-                    let message_fmt = crate::util::format::format(&commit, branches, hash_color)?;
+                    let branches = format_branches(&graph, info, head, self.color);
+                    let message_fmt = crate::util::format::format(&commit, branches, hash_color);
 
                     let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
                         let sec_selected_info = graph.commits.get(sel);
@@ -764,7 +764,6 @@ impl App {
                     None
                 }
         }
-        //self.file_changed(true)?;
         Ok(())
     }
 
@@ -965,17 +964,11 @@ fn get_file_diffs(
 
     if options.diff_mode == DiffMode::Diff {
         diff.print(DiffFormat::Patch, |d, h, l| {
-            match print_diff_line(&d, &h, &l) {
-                Ok(line) => diffs.push((
-                    line.replace("\t", tab_spaces),
-                    l.old_lineno(),
-                    l.new_lineno(),
-                )),
-                Err(err) => {
-                    diff_error = Err(err);
-                    return false;
-                }
-            }
+            diffs.push((
+                print_diff_line(&d, &h, &l).replace("\t", tab_spaces),
+                l.old_lineno(),
+                l.new_lineno(),
+            ));
             true
         })
         .map_err(|err| err.message().to_string())?;
@@ -1036,14 +1029,10 @@ fn get_file_diffs(
     Ok(diffs)
 }
 
-fn print_diff_line(
-    _delta: &DiffDelta,
-    _hunk: &Option<DiffHunk>,
-    line: &DiffLine,
-) -> Result<String, String> {
+fn print_diff_line(_delta: &DiffDelta, _hunk: &Option<DiffHunk>, line: &DiffLine) -> String {
     let mut out = String::new();
     match line.origin() {
-        '+' | '-' | ' ' => write!(out, "{}", line.origin()).map_err(|err| err.to_string())?,
+        '+' | '-' | ' ' => write!(out, "{}", line.origin()).unwrap(),
         _ => {}
     }
     write!(
@@ -1051,8 +1040,9 @@ fn print_diff_line(
         "{}",
         std::str::from_utf8(line.content()).unwrap_or("Invalid UTF8 character.")
     )
-    .map_err(|err| err.to_string())?;
-    Ok(out)
+    .unwrap();
+
+    out
 }
 
 fn get_branches(graph: &GitGraph) -> Vec<BranchItem> {

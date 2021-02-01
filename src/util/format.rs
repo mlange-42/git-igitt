@@ -4,11 +4,7 @@ use std::fmt::Write;
 use yansi::Paint;
 
 /// Format a commit.
-pub fn format(
-    commit: &Commit,
-    branches: String,
-    hash_color: Option<u8>,
-) -> Result<Vec<String>, String> {
+pub fn format(commit: &Commit, branches: String, hash_color: Option<u8>) -> Vec<String> {
     let mut out_vec = vec![];
     let mut out = String::new();
 
@@ -17,12 +13,12 @@ pub fn format(
     } else {
         write!(out, "{}", &commit.id())
     }
-    .map_err(|err| err.to_string())?;
+    .unwrap();
 
     out_vec.push(out);
     out = String::new();
 
-    write!(out, "{}", branches).map_err(|err| err.to_string())?;
+    write!(out, "{}", branches).unwrap();
     out_vec.push(out);
 
     if commit.parent_count() > 1 {
@@ -33,7 +29,7 @@ pub fn format(
             &commit.parent_id(0).unwrap().to_string()[..7],
             &commit.parent_id(1).unwrap().to_string()[..7]
         )
-        .map_err(|err| err.to_string())?;
+        .unwrap();
         out_vec.push(out);
     } else {
         out = String::new();
@@ -47,7 +43,7 @@ pub fn format(
         commit.author().name().unwrap_or(""),
         commit.author().email().unwrap_or("")
     )
-    .map_err(|err| err.to_string())?;
+    .unwrap();
     out_vec.push(out);
 
     out = String::new();
@@ -56,7 +52,7 @@ pub fn format(
         "Date:   {}",
         format_date(commit.author().when(), "%a %b %e %H:%M:%S %Y %z")
     )
-    .map_err(|err| err.to_string())?;
+    .unwrap();
     out_vec.push(out);
 
     out_vec.push("".to_string());
@@ -73,5 +69,5 @@ pub fn format(
         out_vec.push("".to_string());
     }
 
-    Ok(out_vec)
+    out_vec
 }
