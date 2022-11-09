@@ -9,7 +9,7 @@ use unicode_width::UnicodeWidthStr;
 const SCROLL_MARGIN: usize = 2;
 const SCROLLBAR_STR: &str = "\u{2588}";
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BranchItemType {
     LocalBranch,
     RemoteBranch,
