@@ -286,7 +286,7 @@ fn from_args() -> Result<(), String> {
     let compact = !matches.is_present("sparse");
     let style = matches
         .value_of("style")
-        .map(|s| Characters::from_str(s))
+        .map(Characters::from_str)
         .unwrap_or_else(|| Ok(Characters::round()))?;
 
     let model = matches.value_of("model");
@@ -300,7 +300,7 @@ fn from_args() -> Result<(), String> {
         false
     } else if let Some(mode) = matches.value_of("color") {
         match mode {
-            "auto" => (!cfg!(windows) || yansi::Paint::enable_windows_ascii()),
+            "auto" => !cfg!(windows) || yansi::Paint::enable_windows_ascii(),
             "always" => {
                 if cfg!(windows) {
                     yansi::Paint::enable_windows_ascii();
@@ -861,7 +861,7 @@ pub fn set_model<P: AsRef<Path>>(
         format!(
             "Can't write repository settings to file {}\n{}",
             &config_path.display(),
-            err.to_string()
+            err
         )
     })?;
 
@@ -889,9 +889,9 @@ fn create_app(
         .unwrap_or("unknown")
         .to_string();
 
-    let graph = GitGraph::new(repository, &settings, max_commits)?;
+    let graph = GitGraph::new(repository, settings, max_commits)?;
     let branches = get_branches(&graph)?;
-    let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
+    let (graph_lines, text_lines, indices) = print_unicode(&graph, settings)?;
 
     Ok(App::new(
         app_settings.clone(),
@@ -906,7 +906,7 @@ fn create_app(
 
 fn has_changed(app: &mut App) -> Result<bool, String> {
     if let Some(graph) = &app.graph_state.graph {
-        let branches = get_branches(&graph)?;
+        let branches = get_branches(graph)?;
 
         if app.curr_branches != branches {
             app.curr_branches = branches;
@@ -919,7 +919,7 @@ fn has_changed(app: &mut App) -> Result<bool, String> {
             .map_err(|err| err.message().to_string())?;
 
         let name = head.name().ok_or_else(|| "No name for HEAD".to_string())?;
-        let name = if name == "HEAD" { &name } else { &name[11..] };
+        let name = if name == "HEAD" { name } else { &name[11..] };
         if graph.head.name != name
             || graph.head.oid != head.target().ok_or_else(|| "No id for HEAD".to_string())?
             || graph.head.is_branch != head.is_branch()

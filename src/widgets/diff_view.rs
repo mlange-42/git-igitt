@@ -1,14 +1,9 @@
 use git2::Oid;
 use syntect::highlighting::Style;
 
+#[derive(Default)]
 pub struct DiffViewState {
     pub content: Option<DiffViewInfo>,
-}
-
-impl Default for DiffViewState {
-    fn default() -> DiffViewState {
-        DiffViewState { content: None }
-    }
 }
 
 pub struct DiffViewInfo {

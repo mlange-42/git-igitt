@@ -47,7 +47,7 @@ pub fn highlight(lines: &str, extension: &str) -> Option<Vec<Vec<(Style, String)
     let spans: Vec<_> = lines
         .lines()
         .map(|line| {
-            h.highlight(&line.trim_end(), &SYNTAX.syntax)
+            h.highlight(line.trim_end(), &SYNTAX.syntax)
                 .into_iter()
                 .map(|(s, l)| (s, l.to_string()))
                 .collect::<Vec<_>>()

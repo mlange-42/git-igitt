@@ -155,10 +155,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
         let list_height = list_area.height as usize;
 
         let mut start = state.offset;
-        let height = std::cmp::min(
-            list_height as usize,
-            self.items.len().saturating_sub(state.offset),
-        );
+        let height = std::cmp::min(list_height, self.items.len().saturating_sub(state.offset));
         let mut end = start + height;
 
         let selected = state.selected.unwrap_or(0).min(self.items.len() - 1);
@@ -179,9 +176,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
         state.offset = start;
 
         let highlight_symbol = self.highlight_symbol.unwrap_or("");
-        let blank_symbol = std::iter::repeat(" ")
-            .take(highlight_symbol.width())
-            .collect::<String>();
+        let blank_symbol = " ".repeat(highlight_symbol.width());
 
         let mut max_scroll = 0;
         let mut current_height = 0;
@@ -244,9 +239,9 @@ impl<'a> StatefulWidget for BranchList<'a> {
                     format!("..{}", &item.content.content[start..]),
                     item.content.style,
                 );
-                buf.set_span(elem_x, y as u16, &span, max_element_width as u16);
+                buf.set_span(elem_x, y, &span, max_element_width as u16);
             } else {
-                buf.set_span(elem_x, y as u16, &item.content, max_element_width as u16);
+                buf.set_span(elem_x, y, &item.content, max_element_width as u16);
             }
             if is_selected {
                 buf.set_style(area, self.highlight_style);
@@ -261,8 +256,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
                 .min(list_height - 1);
         let scroll_height = (((list_height * list_height) as f32 / self.items.len() as f32).floor()
             as usize)
-            .max(1)
-            .min(list_height);
+            .clamp(1, list_height);
 
         if scroll_height < list_height {
             for y in scroll_start..(scroll_start + scroll_height) {

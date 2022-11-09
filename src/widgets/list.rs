@@ -1,21 +1,11 @@
 use tui::style::Style;
 use tui::text::Text;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ListState {
     pub offset: usize,
     pub selected: Option<usize>,
     pub scroll_x: u16,
-}
-
-impl Default for ListState {
-    fn default() -> ListState {
-        ListState {
-            offset: 0,
-            selected: None,
-            scroll_x: 0,
-        }
-    }
 }
 
 impl ListState {

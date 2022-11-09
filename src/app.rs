@@ -18,7 +18,7 @@ use tui::style::Color;
 
 const HASH_COLOR: u8 = 11;
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum ActiveView {
     Branches,
     Graph,
@@ -37,7 +37,7 @@ pub enum DiffType {
     Renamed,
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum DiffMode {
     Diff,
     Old,
@@ -214,8 +214,8 @@ impl App {
                 .and_then(|idx| graph.commits.get(idx))
                 .map(|info| info.oid);
             let repo = graph.take_repository();
-            let graph = GitGraph::new(repo, &settings, max_commits)?;
-            let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
+            let graph = GitGraph::new(repo, settings, max_commits)?;
+            let (graph_lines, text_lines, indices) = print_unicode(&graph, settings)?;
 
             let sel_idx = sel_oid.and_then(|oid| graph.indices.get(&oid)).cloned();
             let old_idx = self.graph_state.selected;
@@ -734,7 +734,7 @@ impl App {
                     };
 
                     let hash_color = if self.color { Some(HASH_COLOR) } else { None };
-                    let branches = format_branches(&graph, info, head, self.color);
+                    let branches = format_branches(graph, info, head, self.color);
                     let message_fmt = crate::util::format::format(&commit, branches, hash_color);
 
                     let compare_to = if let Some(sel) = self.graph_state.secondary_selected {
@@ -786,7 +786,7 @@ impl App {
                     )
                 };
 
-                let diffs = get_diff_files(&graph, compare_to.as_ref(), &commit)?;
+                let diffs = get_diff_files(graph, compare_to.as_ref(), &commit)?;
 
                 content.diffs = StatefulList::with_items(diffs)
             }
@@ -839,7 +839,7 @@ impl App {
                 let selection = &state.diffs.items[sel_index];
 
                 let diffs = get_file_diffs(
-                    &graph,
+                    graph,
                     compare_to.as_ref(),
                     &commit,
                     &selection.file,
@@ -965,7 +965,7 @@ fn get_file_diffs(
     if options.diff_mode == DiffMode::Diff {
         diff.print(DiffFormat::Patch, |d, h, l| {
             diffs.push((
-                print_diff_line(&d, &h, &l).replace("\t", tab_spaces),
+                print_diff_line(&d, &h, &l).replace('\t', tab_spaces),
                 l.old_lineno(),
                 l.new_lineno(),
             ));
@@ -985,7 +985,7 @@ fn get_file_diffs(
 
             let line = std::str::from_utf8(l.content())
                 .unwrap_or("Invalid UTF8 character.")
-                .replace("\t", tab_spaces);
+                .replace('\t', tab_spaces);
             diffs.push((line, None, None));
 
             if blob_oid.is_zero() {
@@ -1006,7 +1006,7 @@ fn get_file_diffs(
                 let text = std::str::from_utf8(blob.content())
                     .map_err(|err| err.to_string())
                     .unwrap_or("Invalid UTF8 character.");
-                diffs.push((text.replace("\t", tab_spaces), None, None));
+                diffs.push((text.replace('\t', tab_spaces), None, None));
             }
             true
         }) {
