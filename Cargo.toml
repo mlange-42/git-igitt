@@ -2,7 +2,12 @@
 name = "git-igitt"
 version = "0.1.15"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
-edition = "2018"
+description = "Interactive Git terminal application to browse and visualize Git history graphs arranged for your branching model"
+repository = "https://github.com/mlange-42/git-igitt.git"
+keywords = ["git", "graph"]
+license = "MIT"
+readme = "README.md"
+edition = "2021"
 
 [profile.release]
 opt-level = 3
