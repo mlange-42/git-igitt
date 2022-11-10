@@ -20,7 +20,7 @@ impl CtrlChunk {
 
     pub fn parse(munch: &mut Muncher) -> Self {
         munch.reset_peek();
-        if munch.seek(1) == Some("\x1B".to_string()) {
+        if munch.seek(1) == Some("\x1B") {
             munch.eat();
         }
 
@@ -35,7 +35,7 @@ impl CtrlChunk {
 
         munch.reset_peek();
 
-        if munch.seek(4) == Some("\x1B[0m".to_string()) {
+        if munch.seek(4) == Some("\x1B[0m") {
             // eat the reset escape code
             let _ = munch.eat_until(|c| *c == 'm');
             munch.eat();

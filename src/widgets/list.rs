@@ -25,7 +25,7 @@ pub trait ListItem {
     fn is_selectable(&self) -> bool;
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DefaultListItem<'a> {
     pub content: Text<'a>,
     pub style: Style,
