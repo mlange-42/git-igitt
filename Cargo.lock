@@ -279,9 +279,9 @@ dependencies = [
 
 [[package]]
 name = "git-graph"
-version = "0.5.2"
+version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74288f0b5b3ba320baec290cf1b48fb03ede82fefae3b2c5d931cd8289079975"
+checksum = "c24e57a61f91e1b442e8a4e983f5353a79af9bb06e499a88d7d0daba7e8628f7"
 dependencies = [
  "atty",
  "chrono",
@@ -302,7 +302,7 @@ dependencies = [
 
 [[package]]
 name = "git-igitt"
-version = "0.1.16"
+version = "0.1.17"
 dependencies = [
  "clap",
  "crossterm",
