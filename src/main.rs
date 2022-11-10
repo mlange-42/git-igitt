@@ -224,7 +224,7 @@ fn from_args() -> Result<(), String> {
     let matches = app.get_matches();
 
     if let Some(matches) = matches.subcommand_matches("model") {
-        if matches.contains_id("list") {
+        if matches.get_flag("list") {
             println!(
                 "{}",
                 itertools::join(get_available_models(&models_dir)?, "\n")
@@ -233,14 +233,15 @@ fn from_args() -> Result<(), String> {
         }
     }
 
-    let path = matches.get_one("path").unwrap_or(&".");
+    let dot = ".".to_string();
+    let path = matches.get_one::<String>("path").unwrap_or(&dot);
 
     let repository = get_repo(path);
 
     if let Some(matches) = matches.subcommand_matches("model") {
         match repository {
             Ok(repository) => {
-                match matches.get_one::<&str>("model") {
+                match matches.get_one::<String>("model") {
                     None => {
                         let curr_model = get_model_name(&repository, REPO_CONFIG_FILE)?;
                         match curr_model {
@@ -256,7 +257,7 @@ fn from_args() -> Result<(), String> {
         }
     }
 
-    let commit_limit = match matches.get_one::<&str>("max-count") {
+    let commit_limit = match matches.get_one::<String>("max-count") {
         None => None,
         Some(str) => match str.parse::<usize>() {
             Ok(val) => Some(val),
@@ -268,7 +269,7 @@ fn from_args() -> Result<(), String> {
             }
         },
     };
-    let tab_width = match matches.get_one::<&str>("tab-width") {
+    let tab_width = match matches.get_one::<String>("tab-width") {
         None => None,
         Some(str) => match str.parse::<usize>() {
             Ok(val) => Some(val),
@@ -281,25 +282,25 @@ fn from_args() -> Result<(), String> {
         },
     };
 
-    let include_remote = !matches.contains_id("local");
+    let include_remote = !matches.get_flag("local");
 
-    let compact = !matches.contains_id("sparse");
+    let compact = !matches.get_flag("sparse");
     let style = matches
-        .get_one::<&str>("style")
+        .get_one::<String>("style")
         .map(|s| Characters::from_str(s))
         .unwrap_or_else(|| Ok(Characters::round()))?;
 
-    let model = matches.get_one::<&str>("model").copied();
+    let model = matches.get_one::<String>("model");
 
-    let format = match matches.get_one::<&str>("format") {
+    let format = match matches.get_one::<String>("format") {
         None => CommitFormat::OneLine,
         Some(str) => CommitFormat::from_str(str)?,
     };
 
-    let colored = if matches.contains_id("no-color") {
+    let colored = if matches.get_flag("no-color") {
         false
-    } else if let Some(mode) = matches.get_one::<&str>("color").copied() {
-        match mode {
+    } else if let Some(mode) = matches.get_one::<String>("color") {
+        match mode.as_str() {
             "auto" => !cfg!(windows) || yansi::Paint::enable_windows_ascii(),
             "always" => {
                 if cfg!(windows) {
@@ -334,8 +335,14 @@ fn from_args() -> Result<(), String> {
         merge_patterns: MergePatterns::default(),
     };
 
-    run(repository.ok(), settings, app_settings, model, commit_limit)
-        .map_err(|err| err.to_string())?;
+    run(
+        repository.ok(),
+        settings,
+        app_settings,
+        model.map(|x| &**x),
+        commit_limit,
+    )
+    .map_err(|err| err.to_string())?;
 
     Ok(())
 }
