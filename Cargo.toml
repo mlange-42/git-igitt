@@ -1,8 +1,13 @@
 [package]
 name = "git-igitt"
-version = "0.1.15"
+version = "0.1.16"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
-edition = "2018"
+description = "Interactive Git terminal application to browse and visualize Git history graphs arranged for your branching model"
+repository = "https://github.com/mlange-42/git-igitt.git"
+keywords = ["git", "graph"]
+license = "MIT"
+readme = "README.md"
+edition = "2021"
 
 [profile.release]
 opt-level = 3
@@ -16,17 +21,17 @@ overflow-checks = false
 default = ["crossterm"]
 
 [dependencies]
-git2 = { version = "0.13", default-features = false, optional = false }
-crossterm = { version = "0.19", optional = true }
-tui = { version = "0.14", default-features = false, optional = false, features=["crossterm"] }
+git2 = { version = "0.15", default-features = false, optional = false }
+crossterm = { version = "0.25", optional = true }
+tui = { version = "0.19", default-features = false, optional = false, features=["crossterm"] }
 unicode-width = "0.1"
-muncher = "0.6"
+muncher = "0.7"
 itertools = "0.10"
-clap = {version = "2.33", optional = false}
+clap = {version = "4.0", optional = false}
 platform-dirs = "0.3"
 yansi = "0.5"
 toml = "0.5"
 lazy_static = "1.4"
-syntect = "4.5"
-textwrap = {version = "0.13", default-features = false, optional = false, features = ["unicode-width"]}
-git-graph = { git = "https://github.com/mlange-42/git-graph", tag = "0.5.0" }
+syntect = "5.0"
+textwrap = {version = "0.16", default-features = false, optional = false, features = ["unicode-width"]}
+git-graph = "0.5.2"

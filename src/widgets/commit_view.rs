@@ -7,14 +7,9 @@ use tui::layout::Rect;
 use tui::style::Style;
 use tui::widgets::{Block, StatefulWidget, Widget};
 
+#[derive(Default)]
 pub struct CommitViewState {
     pub content: Option<CommitViewInfo>,
-}
-
-impl Default for CommitViewState {
-    fn default() -> CommitViewState {
-        CommitViewState { content: None }
-    }
 }
 
 pub struct DiffItem {
@@ -52,20 +47,11 @@ impl CommitViewInfo {
     }
 }
 
+#[derive(Default)]
 pub struct CommitView<'a> {
     block: Option<Block<'a>>,
     highlight_symbol: Option<&'a str>,
     style: Style,
-}
-
-impl<'a> Default for CommitView<'a> {
-    fn default() -> CommitView<'a> {
-        CommitView {
-            block: None,
-            style: Style::default(),
-            highlight_symbol: None,
-        }
-    }
 }
 
 impl<'a> CommitView<'a> {
@@ -128,16 +114,16 @@ impl<'a> StatefulWidget for CommitView<'a> {
                     }
                 } else {
                     let wrapped = if line_idx > 1 {
-                        textwrap::fill(&text_line, &wrapping)
+                        textwrap::fill(text_line, &wrapping)
                     } else {
                         text_line.clone()
                     };
 
                     for line in wrapped.lines() {
                         let mut x = x_start;
-                        let mut remaining_width = max_element_width as u16;
+                        let mut remaining_width = max_element_width;
 
-                        let line_span = CtrlChars::parse(&line).into_text();
+                        let line_span = CtrlChars::parse(line).into_text();
                         if y >= y0 as i32 {
                             for txt in line_span {
                                 for line in txt.lines {

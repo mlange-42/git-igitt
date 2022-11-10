@@ -20,7 +20,7 @@ impl CtrlChunk {
 
     pub fn parse(munch: &mut Muncher) -> Self {
         munch.reset_peek();
-        if munch.seek(1) == Some("\x1B".to_string()) {
+        if munch.seek(1) == Some("\x1B") {
             munch.eat();
         }
 
@@ -35,7 +35,7 @@ impl CtrlChunk {
 
         munch.reset_peek();
 
-        if munch.seek(4) == Some("\x1B[0m".to_string()) {
+        if munch.seek(4) == Some("\x1B[0m") {
             // eat the reset escape code
             let _ = munch.eat_until(|c| *c == 'm');
             munch.eat();
@@ -44,7 +44,7 @@ impl CtrlChunk {
             loop {
                 let ctrl_text = text_or_ctrl.splitn(2, 'm').collect::<Vec<_>>();
 
-                let mut ctrl = vec![ctrl_text[0].replace("[", "")];
+                let mut ctrl = vec![ctrl_text[0].replace('[', "")];
                 if ctrl[0].contains(';') {
                     ctrl = ctrl[0].split(';').map(|s| s.to_string()).collect();
                 }
@@ -159,7 +159,6 @@ impl fmt::Display for CtrlChunk {
 
 #[derive(Clone, Debug, Default)]
 pub struct CtrlChars {
-    input: String,
     parsed: Vec<CtrlChunk>,
 }
 
@@ -178,7 +177,7 @@ impl CtrlChars {
     pub fn parse(input: &str) -> Self {
         let mut parsed = Vec::new();
 
-        let mut munch = Muncher::new(&input);
+        let mut munch = Muncher::new(input);
         let pre_ctrl = munch.eat_until(|c| *c == '\x1B').collect::<String>();
         parsed.push(CtrlChunk::text(pre_ctrl));
 
@@ -189,10 +188,7 @@ impl CtrlChars {
                 parsed.push(CtrlChunk::parse(&mut munch))
             }
         }
-        Self {
-            input: input.to_string(),
-            parsed,
-        }
+        Self { parsed }
     }
 
     pub fn into_text<'a>(self) -> Vec<Text<'a>> {

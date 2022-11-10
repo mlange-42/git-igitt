@@ -2,7 +2,7 @@ use crate::util::ctrl_chars::CtrlChars;
 use crate::widgets::branches_view::BranchItem;
 use crate::widgets::list::StatefulList;
 use git_graph::graph::GitGraph;
-use std::iter::{self, Iterator};
+use std::iter::Iterator;
 use tui::buffer::Buffer;
 use tui::layout::Rect;
 use tui::style::Style;
@@ -12,6 +12,7 @@ use unicode_width::UnicodeWidthStr;
 const SCROLL_MARGIN: usize = 3;
 const SCROLLBAR_STR: &str = "\u{2588}";
 
+#[derive(Default)]
 pub struct GraphViewState {
     pub graph: Option<GitGraph>,
     pub graph_lines: Vec<String>,
@@ -24,21 +25,6 @@ pub struct GraphViewState {
     pub secondary_changed: bool,
 }
 
-impl Default for GraphViewState {
-    fn default() -> GraphViewState {
-        GraphViewState {
-            graph: None,
-            graph_lines: vec![],
-            text_lines: vec![],
-            indices: vec![],
-            offset: 0,
-            selected: None,
-            branches: None,
-            secondary_selected: None,
-            secondary_changed: false,
-        }
-    }
-}
 impl GraphViewState {
     pub fn move_selection(&mut self, steps: usize, down: bool) -> bool {
         let changed = if let Some(sel) = self.selected {
@@ -91,6 +77,7 @@ impl GraphViewState {
     }
 }
 
+#[derive(Default)]
 pub struct GraphView<'a> {
     block: Option<Block<'a>>,
     highlight_symbol: Option<&'a str>,
@@ -99,17 +86,6 @@ pub struct GraphView<'a> {
     highlight_style: Style,
 }
 
-impl<'a> Default for GraphView<'a> {
-    fn default() -> GraphView<'a> {
-        GraphView {
-            block: None,
-            style: Style::default(),
-            highlight_symbol: None,
-            secondary_highlight_symbol: None,
-            highlight_style: Style::default(),
-        }
-    }
-}
 impl<'a> GraphView<'a> {
     pub fn block(mut self, block: Block<'a>) -> GraphView<'a> {
         self.block = Some(block);
@@ -163,7 +139,7 @@ impl<'a> StatefulWidget for GraphView<'a> {
         let mut start = state.offset;
 
         let height = std::cmp::min(
-            list_height as usize,
+            list_height,
             state.graph_lines.len().saturating_sub(state.offset),
         );
         let mut end = start + height;
@@ -190,9 +166,10 @@ impl<'a> StatefulWidget for GraphView<'a> {
         let move_to_end = if selected_index >= state.indices.len() - 1 {
             state.graph_lines.len() - 1
         } else {
-            (state.indices[selected_index + 1] - 1)
-                .max(move_to_selected + SCROLL_MARGIN)
-                .min(state.graph_lines.len() - 1)
+            (state.indices[selected_index + 1] - 1).clamp(
+                move_to_selected + SCROLL_MARGIN,
+                state.graph_lines.len() - 1,
+            )
         };
         let move_to_start = move_to_selected.saturating_sub(SCROLL_MARGIN);
 
@@ -211,9 +188,7 @@ impl<'a> StatefulWidget for GraphView<'a> {
         let highlight_symbol = self.highlight_symbol.unwrap_or("");
         let secondary_highlight_symbol = self.secondary_highlight_symbol.unwrap_or("");
 
-        let blank_symbol = iter::repeat(" ")
-            .take(highlight_symbol.width())
-            .collect::<String>();
+        let blank_symbol = " ".repeat(highlight_symbol.width());
 
         let style = Style::default();
         for (current_height, (i, (graph_item, text_item))) in state
@@ -277,8 +252,7 @@ impl<'a> StatefulWidget for GraphView<'a> {
                 .min(list_height - 1);
         let scroll_height = (((list_height * list_height) as f32 / state.graph_lines.len() as f32)
             .floor() as usize)
-            .max(1)
-            .min(list_height);
+            .clamp(1, list_height);
 
         if scroll_height < list_height {
             for y in scroll_start..(scroll_start + scroll_height) {

@@ -1,4 +1,4 @@
-use clap::{crate_version, Arg, SubCommand};
+use clap::{crate_version, Arg, Command};
 use crossterm::{
     event::{self, Event as CEvent, KeyCode, KeyModifiers},
     execute,
@@ -66,7 +66,7 @@ fn from_args() -> Result<(), String> {
 
     create_config(&models_dir)?;
 
-    let app = clap::App::new("git-igitt")
+    let app = Command::new("git-igitt")
         .version(crate_version!())
         .about(
             "Interactive Git Terminal app with structured Git graphs.\n    \
@@ -81,88 +81,88 @@ fn from_args() -> Result<(), String> {
                  git-graph model <model>     -> Permanently set model <model> for this repo",
         )
         .arg(
-            Arg::with_name("path")
+            Arg::new("path")
                 .long("path")
-                .short("p")
+                .short('p')
                 .help("Open repository from this path or above. Default '.'")
                 .required(false)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("max-count")
+            Arg::new("max-count")
                 .long("max-count")
-                .short("n")
+                .short('n')
                 .help("Maximum number of commits")
                 .required(false)
-                .takes_value(true)
+                .num_args(1)
                 .value_name("n"),
         )
         .arg(
-            Arg::with_name("model")
+            Arg::new("model")
                 .long("model")
-                .short("m")
+                .short('m')
                 .help("Branching model. Available presets are [simple|git-flow|none].\n\
                        Default: git-flow. \n\
                        Permanently set the model for a repository with\n\
                          > git-graph model <model>")
                 .required(false)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("local")
+            Arg::new("local")
                 .long("local")
-                .short("l")
+                .short('l')
                 .help("Show only local branches, no remotes.")
                 .required(false)
-                .takes_value(false),
+                .num_args(0),
         )
         .arg(
-            Arg::with_name("sparse")
+            Arg::new("sparse")
                 .long("sparse")
-                .short("S")
+                .short('S')
                 .help("Print a less compact graph: merge lines point to target lines\n\
                        rather than merge commits.")
                 .required(false)
-                .takes_value(false),
+                .num_args(0),
         )
         .arg(
-            Arg::with_name("color")
+            Arg::new("color")
                 .long("color")
                 .help("Specify when colors should be used. One of [auto|always|never].\n\
                        Default: auto.")
                 .required(false)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("no-color")
+            Arg::new("no-color")
                 .long("no-color")
                 .help("Print without colors. Missing color support should be detected\n\
                        automatically (e.g. when piping to a file).\n\
                        Overrides option '--color'")
                 .required(false)
-                .takes_value(false),
+                .num_args(0),
         )
         .arg(
-            Arg::with_name("style")
+            Arg::new("style")
                 .long("style")
-                .short("s")
+                .short('s')
                 .help("Output style. One of [normal/thin|round|bold|double|ascii].\n  \
                          (First character can be used as abbreviation, e.g. '-s r')")
                 .required(false)
-                .takes_value(true),
+                .num_args(1),
         )
         .arg(
-            Arg::with_name("tab-width")
+            Arg::new("tab-width")
                 .long("tab-width")
                 .help("Tab width for display in diffs. Default: 4.")
                 .required(false)
-                .takes_value(true)
+                .num_args(1)
                 .value_name("width"),
         )
         .arg(
-            Arg::with_name("format")
+            Arg::new("format")
                 .long("format")
-                .short("f")
+                .short('f')
                 .help("Commit format. One of [oneline|short|medium|full|\"<string>\"].\n  \
                          (First character can be used as abbreviation, e.g. '-f m')\n\
                        Default: oneline.\n\
@@ -200,31 +200,31 @@ fn from_args() -> Result<(), String> {
                             \n    \
                                 See also the respective git help: https://git-scm.com/docs/pretty-formats\n")
                 .required(false)
-                .takes_value(true),
+                .num_args(1),
         )
-        .subcommand(SubCommand::with_name("model")
+        .subcommand(Command::new("model")
             .about("Prints or permanently sets the branching model for a repository.")
             .arg(
-                Arg::with_name("model")
+                Arg::new("model")
                     .help("The branching model to be used. Available presets are [simple|git-flow|none].\n\
                            When not given, prints the currently set model.")
                     .value_name("model")
-                    .takes_value(true)
+                    .num_args(1)
                     .required(false)
                     .index(1))
             .arg(
-                Arg::with_name("list")
+                Arg::new("list")
                     .long("list")
-                    .short("l")
+                    .short('l')
                     .help("List all available branching models.")
                     .required(false)
-                    .takes_value(false),
+                    .num_args(0),
             ));
 
-    let matches = app.clone().get_matches();
+    let matches = app.get_matches();
 
     if let Some(matches) = matches.subcommand_matches("model") {
-        if matches.is_present("list") {
+        if matches.contains_id("list") {
             println!(
                 "{}",
                 itertools::join(get_available_models(&models_dir)?, "\n")
@@ -233,14 +233,14 @@ fn from_args() -> Result<(), String> {
         }
     }
 
-    let path = matches.value_of("path").unwrap_or(".");
+    let path = matches.get_one("path").unwrap_or(&".");
 
     let repository = get_repo(path);
 
     if let Some(matches) = matches.subcommand_matches("model") {
         match repository {
             Ok(repository) => {
-                match matches.value_of("model") {
+                match matches.get_one::<&str>("model") {
                     None => {
                         let curr_model = get_model_name(&repository, REPO_CONFIG_FILE)?;
                         match curr_model {
@@ -256,7 +256,7 @@ fn from_args() -> Result<(), String> {
         }
     }
 
-    let commit_limit = match matches.value_of("max-count") {
+    let commit_limit = match matches.get_one::<&str>("max-count") {
         None => None,
         Some(str) => match str.parse::<usize>() {
             Ok(val) => Some(val),
@@ -268,7 +268,7 @@ fn from_args() -> Result<(), String> {
             }
         },
     };
-    let tab_width = match matches.value_of("tab-width") {
+    let tab_width = match matches.get_one::<&str>("tab-width") {
         None => None,
         Some(str) => match str.parse::<usize>() {
             Ok(val) => Some(val),
@@ -281,26 +281,26 @@ fn from_args() -> Result<(), String> {
         },
     };
 
-    let include_remote = !matches.is_present("local");
+    let include_remote = !matches.contains_id("local");
 
-    let compact = !matches.is_present("sparse");
+    let compact = !matches.contains_id("sparse");
     let style = matches
-        .value_of("style")
+        .get_one::<&str>("style")
         .map(|s| Characters::from_str(s))
         .unwrap_or_else(|| Ok(Characters::round()))?;
 
-    let model = matches.value_of("model");
+    let model = matches.get_one::<&str>("model").copied();
 
-    let format = match matches.value_of("format") {
+    let format = match matches.get_one::<&str>("format") {
         None => CommitFormat::OneLine,
         Some(str) => CommitFormat::from_str(str)?,
     };
 
-    let colored = if matches.is_present("no-color") {
+    let colored = if matches.contains_id("no-color") {
         false
-    } else if let Some(mode) = matches.value_of("color") {
+    } else if let Some(mode) = matches.get_one::<&str>("color").copied() {
         match mode {
-            "auto" => (!cfg!(windows) || yansi::Paint::enable_windows_ascii()),
+            "auto" => !cfg!(windows) || yansi::Paint::enable_windows_ascii(),
             "always" => {
                 if cfg!(windows) {
                     yansi::Paint::enable_windows_ascii();
@@ -420,6 +420,7 @@ fn run(
                             return Event::Update;
                         }
                     }
+                    _ => {}
                 }
                 continue;
             }
@@ -861,7 +862,7 @@ pub fn set_model<P: AsRef<Path>>(
         format!(
             "Can't write repository settings to file {}\n{}",
             &config_path.display(),
-            err.to_string()
+            err
         )
     })?;
 
@@ -889,9 +890,9 @@ fn create_app(
         .unwrap_or("unknown")
         .to_string();
 
-    let graph = GitGraph::new(repository, &settings, max_commits)?;
+    let graph = GitGraph::new(repository, settings, max_commits)?;
     let branches = get_branches(&graph)?;
-    let (graph_lines, text_lines, indices) = print_unicode(&graph, &settings)?;
+    let (graph_lines, text_lines, indices) = print_unicode(&graph, settings)?;
 
     Ok(App::new(
         app_settings.clone(),
@@ -906,7 +907,7 @@ fn create_app(
 
 fn has_changed(app: &mut App) -> Result<bool, String> {
     if let Some(graph) = &app.graph_state.graph {
-        let branches = get_branches(&graph)?;
+        let branches = get_branches(graph)?;
 
         if app.curr_branches != branches {
             app.curr_branches = branches;
@@ -919,7 +920,7 @@ fn has_changed(app: &mut App) -> Result<bool, String> {
             .map_err(|err| err.message().to_string())?;
 
         let name = head.name().ok_or_else(|| "No name for HEAD".to_string())?;
-        let name = if name == "HEAD" { &name } else { &name[11..] };
+        let name = if name == "HEAD" { name } else { &name[11..] };
         if graph.head.name != name
             || graph.head.oid != head.target().ok_or_else(|| "No id for HEAD".to_string())?
             || graph.head.is_branch != head.is_branch()
