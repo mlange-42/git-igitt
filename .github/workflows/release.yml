@@ -52,7 +52,7 @@ jobs:
           cargo build --target ${{ matrix.target }} --release
       - name: Compress
         run: |
-          cp -f target/release/$REPO${{ matrix.bin_extension }} .
+          cp -f target/${{ matrix.target }}/release/$REPO${{ matrix.bin_extension }} .
           tar -czf release.tar.gz $REPO${{ matrix.bin_extension }}
         shell: bash
       - name: Archive artifacts
