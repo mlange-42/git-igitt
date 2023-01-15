@@ -25,6 +25,7 @@ jobs:
             bin_extension: ""
             target: "x86_64-unknown-linux-musl"
             os_name: "linux-amd64-musl"
+            requires_musl: "true"
           - os: windows-latest
             bin_extension: ".exe"
             target: "x86_64-pc-windows-msvc"
@@ -43,9 +44,9 @@ jobs:
         run: |
           rustup target add ${{ matrix.target }}
       - name: Install musl
-        if: ${{ matrix.os_name }} == 'linux-amd64-musl'
+        if: ${{ matrix.requires_musl }}
         run: |
-          apt-get -y install musl
+          sudo apt-get -y install musl
       - name: Build
         run: |
           cargo build --target ${{ matrix.target }} --release
