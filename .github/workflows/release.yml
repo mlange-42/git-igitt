@@ -42,6 +42,10 @@ jobs:
       - name: Install toolchain
         run: |
           rustup target add ${{ matrix.target }}
+      - name: Install musl
+        if: ${{ matrix.os_name }} == 'linux-amd64-musl'
+        run: |
+          apt-get -y install musl
       - name: Build
         run: |
           cargo build --target ${{ matrix.target }} --release
