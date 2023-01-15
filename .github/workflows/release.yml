@@ -46,7 +46,7 @@ jobs:
       - name: Install musl
         if: ${{ matrix.requires_musl }}
         run: |
-          sudo apt-get -y install musl musl-dev
+          sudo apt-get -y install musl musl-tools
       - name: Build
         run: |
           cargo build --target ${{ matrix.target }} --release
