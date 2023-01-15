@@ -40,13 +40,22 @@ jobs:
       - name: Get tag
         run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
         shell: bash
-      - name: Install toolchain
+
+      - name: Install stable toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+
+      - name: Install target
         run: |
           rustup target add ${{ matrix.target }}
       - name: Install musl
         if: ${{ matrix.requires_musl }}
         run: |
           sudo apt-get -y install musl musl-tools
+
       - name: Build
         run: |
           cargo build --target ${{ matrix.target }} --release
