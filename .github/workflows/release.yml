@@ -1,6 +1,8 @@
 name: Release
 
 on:
+  push:
+    branches: ["**"]
   release:
     types: [ created ]
 
@@ -17,9 +19,15 @@ jobs:
         include:
           - os: ubuntu-latest
             bin_extension: ""
+            target: "x86_64-unknown-linux-gnu"
             os_name: "linux-amd64"
+          - os: ubuntu-latest
+            bin_extension: ""
+            target: "x86_64-unknown-linux-musl"
+            os_name: "linux-amd64-musl"
           - os: windows-latest
             bin_extension: ".exe"
+            target: "x86_64-pc-windows-msvc"
             os_name: "windows-amd64"
           - os: macos-latest
             bin_extension: ""
@@ -32,13 +40,20 @@ jobs:
         shell: bash
       - name: Build
         run: |
-          cargo build --release
+          cargo build --target ${{ matrix.target }} --release
       - name: Compress
         run: |
           cp -f target/release/$REPO${{ matrix.bin_extension }} .
           tar -czf release.tar.gz $REPO${{ matrix.bin_extension }}
         shell: bash
+      - name: Archive artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: build-${{ matrix.os_name }}
+          path: |
+            release.tar.gz
       - name: Upload binaries to release
+        if: success() && github.event_name == 'release' && github.event.action == 'created'
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
