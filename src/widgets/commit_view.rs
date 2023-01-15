@@ -114,6 +114,7 @@ impl<'a> StatefulWidget for CommitView<'a> {
                     }
                 } else {
                     let wrapped = if line_idx > 1 {
+                        #[allow(clippy::needless_borrow)]
                         textwrap::fill(text_line, &wrapping)
                     } else {
                         text_line.clone()
