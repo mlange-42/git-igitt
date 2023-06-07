@@ -59,6 +59,45 @@ fn main() {
     });
 }
 
+fn setup_logger(log_level: &String) {
+    let level = match log_level.as_str() {
+        "error" => log::LevelFilter::Error,
+        "warn" => log::LevelFilter::Warn,
+        "info" => log::LevelFilter::Info,
+        "debug" => log::LevelFilter::Debug,
+        "trace" => log::LevelFilter::Trace,
+        "off" => log::LevelFilter::Off,
+        _ => log::LevelFilter::Off,
+    };
+
+    // Logging to log file.
+    let logfile = log4rs::append::file::FileAppender::builder()
+        // Pattern: https://docs.rs/log4rs/*/log4rs/encode/pattern/index.html
+        .encoder(Box::new(log4rs::encode::pattern::PatternEncoder::new(
+            "{l} - {m}\n",
+        )))
+        .build("log.txt")
+        .unwrap();
+
+    // Log Trace level output to file where trace is the default level
+    // and the programmatically specified level to stderr.
+    let config = log4rs::Config::builder()
+        .appender(log4rs::config::Appender::builder().build("logfile", Box::new(logfile)))
+        .build(
+            log4rs::config::Root::builder()
+                .appender("logfile")
+                .build(level),
+        )
+        .unwrap();
+
+    // Use this to change log levels at runtime.
+    // This means you can change the default log level to trace
+    // if you are trying to debug an issue and need more logs on then turn it off
+    // once you are done.
+    // let _handle = log4rs::init_config(config)?;
+    let _handle = log4rs::init_config(config).unwrap();
+}
+
 fn from_args() -> Result<(), String> {
     let app_dir = AppDirs::new(Some("git-graph"), false).unwrap().config_dir;
     let mut models_dir = app_dir;
@@ -124,6 +163,13 @@ fn from_args() -> Result<(), String> {
                        rather than merge commits.")
                 .required(false)
                 .num_args(0),
+        )
+        .arg(
+            Arg::new("log-level")
+                .long("log-level")
+                .help("Output log messages to a file. Default off. One of [error|warn|info|debug|trace|off].")
+                .required(false)
+                .num_args(1),
         )
         .arg(
             Arg::new("color")
@@ -285,6 +331,11 @@ fn from_args() -> Result<(), String> {
     let include_remote = !matches.get_flag("local");
 
     let compact = !matches.get_flag("sparse");
+    match matches.get_one::<String>("log-level") {
+        Some(log_level) => setup_logger(log_level),
+        None => {}
+    }
+
     let style = matches
         .get_one::<String>("style")
         .map(|s| Characters::from_str(s))
