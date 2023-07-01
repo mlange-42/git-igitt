@@ -44,7 +44,24 @@ enum Event<I> {
     Update,
 }
 
+fn reset_terminal() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    disable_raw_mode()?;
+    crossterm::execute!(std::io::stdout(), LeaveAlternateScreen)?;
+
+    Ok(())
+}
+
+fn chain_panic_hook() {
+    let original_hook = std::panic::take_hook();
+
+    std::panic::set_hook(Box::new(move |panic| {
+        reset_terminal().unwrap();
+        original_hook(panic);
+    }));
+}
+
 fn main() {
+    chain_panic_hook();
     std::process::exit(match from_args() {
         Ok(_) => 0,
         Err(err) => {
