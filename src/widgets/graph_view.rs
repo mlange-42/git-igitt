@@ -166,10 +166,9 @@ impl<'a> StatefulWidget for GraphView<'a> {
         let move_to_end = if selected_index >= state.indices.len() - 1 {
             state.graph_lines.len() - 1
         } else {
-            (state.indices[selected_index + 1] - 1).clamp(
-                move_to_selected + SCROLL_MARGIN,
-                state.graph_lines.len() - 1,
-            )
+            (state.indices[selected_index + 1] - 1)
+                .max(move_to_selected + SCROLL_MARGIN)
+                .min(state.graph_lines.len() - 1)
         };
         let move_to_start = move_to_selected.saturating_sub(SCROLL_MARGIN);
 
