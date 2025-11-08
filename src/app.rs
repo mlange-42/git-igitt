@@ -79,15 +79,15 @@ impl FromStr for DiffType {
     }
 }
 
-impl ToString for DiffType {
-    fn to_string(&self) -> String {
-        match self {
+impl std::fmt::Display for DiffType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
             DiffType::Added => "+",
             DiffType::Deleted => "-",
             DiffType::Modified => "m",
             DiffType::Renamed => "r",
-        }
-        .to_string()
+        };
+        write!(f, "{}", s)
     }
 }
 

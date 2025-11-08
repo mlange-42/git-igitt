@@ -290,12 +290,12 @@ fn draw_files<B: Backend>(f: &mut Frame<B>, target: Rect, app: &mut App) {
                     let style = Style::default().fg(item.diff_type.to_color());
                     FileListItem::new(
                         Span::styled(&item.file, style),
-                        Span::styled(format!("{} ", item.diff_type.to_string()), style),
+                        Span::styled(format!("{} ", item.diff_type), style),
                     )
                 } else {
                     FileListItem::new(
                         Span::raw(&item.file),
-                        Span::raw(format!("{} ", item.diff_type.to_string())),
+                        Span::raw(format!("{} ", item.diff_type)),
                     )
                 }
             })
