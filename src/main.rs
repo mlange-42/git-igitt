@@ -76,8 +76,8 @@ fn main() {
     });
 }
 
-fn setup_logger(log_level: &String) {
-    let level = match log_level.as_str() {
+fn setup_logger(log_level: &str) {
+    let level = match log_level {
         "error" => log::LevelFilter::Error,
         "warn" => log::LevelFilter::Warn,
         "info" => log::LevelFilter::Info,
