@@ -35,3 +35,5 @@ lazy_static = "1.4"
 syntect = "5.0"
 textwrap = {version = "0.16", default-features = false, optional = false, features = ["unicode-width"]}
 git-graph = "0.5.3"
+log4rs = "1.2.0"
+log = "0.4.18"
