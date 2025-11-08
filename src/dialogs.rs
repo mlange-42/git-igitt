@@ -119,7 +119,7 @@ impl<'a> FileDialog<'a> {
                         let is_repo = Repository::open(path.path()).is_ok();
                         path.path()
                             .components()
-                            .last()
+                            .next_back()
                             .and_then(|c| c.as_os_str().to_str().map(|s| (s.to_string(), is_repo)))
                     } else {
                         None
@@ -135,7 +135,7 @@ impl<'a> FileDialog<'a> {
         } else if let Some(prev) = prev_location {
             if let Some(prev_index) = prev
                 .components()
-                .last()
+                .next_back()
                 .and_then(|comp| comp.as_os_str().to_str())
                 .and_then(|dir| self.dirs.iter().position(|d| d.0 == dir))
             {

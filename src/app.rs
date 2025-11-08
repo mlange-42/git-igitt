@@ -727,7 +727,7 @@ impl App {
                         .map_err(|err| err.message().to_string())?;
 
                     let head_idx = graph.indices.get(&graph.head.oid);
-                    let head = if head_idx.map_or(false, |h| h == &idx) {
+                    let head = if head_idx == Some(&idx) {
                         Some(&graph.head)
                     } else {
                         None

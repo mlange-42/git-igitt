@@ -958,7 +958,7 @@ fn create_app(
     let name = &repository
         .path()
         .parent()
-        .and_then(|p| p.components().last().and_then(|c| c.as_os_str().to_str()))
+        .and_then(|p| p.components().next_back().and_then(|c| c.as_os_str().to_str()))
         .unwrap_or("unknown")
         .to_string();
 
