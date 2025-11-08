@@ -32,7 +32,7 @@ muncher = "0.7"
 itertools = "0.14"
 clap = { version = "4.5", optional = false }
 platform-dirs = "0.3"
-yansi = "0.5"
+yansi = "1.0"
 toml = "0.9"
 lazy_static = "1.4"
 syntect = "5.0"

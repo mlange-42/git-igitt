@@ -8,10 +8,11 @@ pub fn format(commit: &Commit, branches: String, hash_color: Option<u8>) -> Vec<
     let mut out_vec = vec![];
     let mut out = String::new();
 
+    let id = commit.id();
     if let Some(color) = hash_color {
-        write!(out, "{}", Paint::fixed(color, &commit.id()))
+        write!(out, "{}", id.to_string().fixed(color))
     } else {
-        write!(out, "{}", &commit.id())
+        write!(out, "{}", id)
     }
     .unwrap();
 

@@ -348,7 +348,9 @@ fn from_args() -> Result<(), String> {
     let include_remote = !matches.get_flag("local");
 
     let compact = !matches.get_flag("sparse");
-    if let Some(log_level) = matches.get_one::<String>("log-level") { setup_logger(log_level) }
+    if let Some(log_level) = matches.get_one::<String>("log-level") {
+        setup_logger(log_level)
+    }
 
     let style = matches
         .get_one::<String>("style")
@@ -366,10 +368,15 @@ fn from_args() -> Result<(), String> {
         false
     } else if let Some(mode) = matches.get_one::<String>("color") {
         match mode.as_str() {
-            "auto" => !cfg!(windows) || yansi::Paint::enable_windows_ascii(),
+            "auto" => {
+                !cfg!(windows) || {
+                    yansi::enable();
+                    yansi::is_enabled()
+                }
+            }
             "always" => {
                 if cfg!(windows) {
-                    yansi::Paint::enable_windows_ascii();
+                    yansi::enable();
                 }
                 true
             }
@@ -382,7 +389,10 @@ fn from_args() -> Result<(), String> {
             }
         }
     } else {
-        !cfg!(windows) || yansi::Paint::enable_windows_ascii()
+        !cfg!(windows) || {
+            yansi::enable();
+            yansi::is_enabled()
+        }
     };
 
     let app_settings = AppSettings::default().tab_width(tab_width.unwrap_or(4));
@@ -958,7 +968,11 @@ fn create_app(
     let name = &repository
         .path()
         .parent()
-        .and_then(|p| p.components().next_back().and_then(|c| c.as_os_str().to_str()))
+        .and_then(|p| {
+            p.components()
+                .next_back()
+                .and_then(|c| c.as_os_str().to_str())
+        })
         .unwrap_or("unknown")
         .to_string();
 
