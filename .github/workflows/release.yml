@@ -58,7 +58,7 @@ jobs:
 
       - name: Build
         run: |
-          cargo build --target ${{ matrix.target }} --release
+          cargo build --locked --target ${{ matrix.target }} --release
       - name: Compress
         run: |
           cp -f target/${{ matrix.target }}/release/$REPO${{ matrix.bin_extension }} .
