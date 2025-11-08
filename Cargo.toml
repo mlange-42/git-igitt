@@ -23,18 +23,22 @@ default = ["crossterm"]
 
 [dependencies]
 git2 = { version = "0.15", default-features = false, optional = false }
-crossterm = { version = "0.25", optional = true }
-tui = { version = "0.19", default-features = false, optional = false, features=["crossterm"] }
-unicode-width = "0.1"
+crossterm = { version = "0.29", optional = true }
+tui = { version = "0.19", default-features = false, optional = false, features = [
+	"crossterm",
+] }
+unicode-width = "0.2"
 muncher = "0.7"
-itertools = "0.10"
-clap = {version = "4.0", optional = false}
+itertools = "0.14"
+clap = { version = "4.5", optional = false }
 platform-dirs = "0.3"
 yansi = "0.5"
-toml = "0.5"
+toml = "0.9"
 lazy_static = "1.4"
 syntect = "5.0"
-textwrap = {version = "0.16", default-features = false, optional = false, features = ["unicode-width"]}
+textwrap = { version = "0.16", default-features = false, optional = false, features = [
+	"unicode-width",
+] }
 git-graph = "0.5.3"
 log4rs = "1.2.0"
 log = "0.4.18"
