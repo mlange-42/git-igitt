@@ -35,10 +35,7 @@ fn brighter(color: SynColor, factor: f32) -> SynColor {
 }
 
 pub fn highlight(lines: &str, extension: &str) -> Option<Vec<Vec<(Style, String)>>> {
-    let syntax = match SYNTAX.syntax.find_syntax_by_extension(extension) {
-        None => return None,
-        Some(syntax) => syntax,
-    };
+    let syntax = SYNTAX.syntax.find_syntax_by_extension(extension)?;
 
     let mut h = HighlightLines::new(syntax, &THEME);
 
