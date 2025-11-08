@@ -88,7 +88,7 @@ impl<'a> FileList<'a> {
     }
 }
 
-impl<'a> StatefulWidget for FileList<'a> {
+impl StatefulWidget for FileList<'_> {
     type State = ListState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -234,7 +234,7 @@ impl<'a> StatefulWidget for FileList<'a> {
     }
 }
 
-impl<'a> Widget for FileList<'a> {
+impl Widget for FileList<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = ListState::default();
         StatefulWidget::render(self, area, buf, &mut state);

@@ -71,7 +71,7 @@ impl<'a> CommitView<'a> {
     }
 }
 
-impl<'a> StatefulWidget for CommitView<'a> {
+impl StatefulWidget for CommitView<'_> {
     type State = CommitViewState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -154,7 +154,7 @@ impl<'a> StatefulWidget for CommitView<'a> {
     }
 }
 
-impl<'a> Widget for CommitView<'a> {
+impl Widget for CommitView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = CommitViewState::default();
         StatefulWidget::render(self, area, buf, &mut state);

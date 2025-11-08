@@ -348,10 +348,7 @@ fn from_args() -> Result<(), String> {
     let include_remote = !matches.get_flag("local");
 
     let compact = !matches.get_flag("sparse");
-    match matches.get_one::<String>("log-level") {
-        Some(log_level) => setup_logger(log_level),
-        None => {}
-    }
+    if let Some(log_level) = matches.get_one::<String>("log-level") { setup_logger(log_level) }
 
     let style = matches
         .get_one::<String>("style")
