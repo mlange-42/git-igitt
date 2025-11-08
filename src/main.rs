@@ -173,6 +173,14 @@ fn from_args() -> Result<(), String> {
                 .num_args(0),
         )
         .arg(
+            Arg::new("reverse")
+                .long("reverse")
+                .short('r')
+                .help("Show commits in reverse order")
+                .required(false)
+                .num_args(0),
+        )
+        .arg(
             Arg::new("sparse")
                 .long("sparse")
                 .short('S')
@@ -346,6 +354,7 @@ fn from_args() -> Result<(), String> {
     };
 
     let include_remote = !matches.get_flag("local");
+    let reverse_commit_order = matches.get_flag("reverse");
 
     let compact = !matches.get_flag("sparse");
     if let Some(log_level) = matches.get_one::<String>("log-level") {
@@ -398,6 +407,7 @@ fn from_args() -> Result<(), String> {
     let app_settings = AppSettings::default().tab_width(tab_width.unwrap_or(4));
 
     let settings = Settings {
+        reverse_commit_order,
         debug: false,
         colored,
         compact,
