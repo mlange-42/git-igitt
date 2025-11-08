@@ -72,7 +72,7 @@ impl ListItem for BranchItem {
     }
 }
 
-impl<'a> ListItem for BranchListItem<'a> {
+impl ListItem for BranchListItem<'_> {
     fn is_selectable(&self) -> bool {
         self.item_type != &BranchItemType::Heading
     }
@@ -131,7 +131,7 @@ impl<'a> BranchList<'a> {
     }
 }
 
-impl<'a> StatefulWidget for BranchList<'a> {
+impl StatefulWidget for BranchList<'_> {
     type State = ListState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -271,7 +271,7 @@ impl<'a> StatefulWidget for BranchList<'a> {
     }
 }
 
-impl<'a> Widget for BranchList<'a> {
+impl Widget for BranchList<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = ListState::default();
         StatefulWidget::render(self, area, buf, &mut state);

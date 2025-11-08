@@ -113,7 +113,7 @@ impl<'a> GraphView<'a> {
     }
 }
 
-impl<'a> StatefulWidget for GraphView<'a> {
+impl StatefulWidget for GraphView<'_> {
     type State = GraphViewState;
 
     fn render(mut self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
@@ -267,7 +267,7 @@ impl<'a> StatefulWidget for GraphView<'a> {
     }
 }
 
-impl<'a> Widget for GraphView<'a> {
+impl Widget for GraphView<'_> {
     fn render(self, area: Rect, buf: &mut Buffer) {
         let mut state = GraphViewState::default();
         StatefulWidget::render(self, area, buf, &mut state);
