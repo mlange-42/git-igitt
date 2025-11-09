@@ -454,7 +454,7 @@ dependencies = [
 
 [[package]]
 name = "git-igitt"
-version = "0.1.18"
+version = "0.1.19"
 dependencies = [
  "clap",
  "crossterm 0.29.0",

@@ -1,6 +1,6 @@
 [package]
 name = "git-igitt"
-version = "0.1.18"
+version = "0.1.19"
 authors = ["Martin Lange <martin_lange_@gmx.net>"]
 description = "Interactive Git terminal application to browse and visualize Git history graphs arranged for your branching model"
 repository = "https://github.com/mlange-42/git-igitt.git"
